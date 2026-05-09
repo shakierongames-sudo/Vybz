@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.tools/
+.env
+.env.local
+*.tsbuildinfo
+vite.config.d.ts
+*.zip
+public/vybz-logo.png

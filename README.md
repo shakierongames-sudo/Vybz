@@ -86,4 +86,4 @@ Manual deploy limitations:
 
 ## PWA Notes
 
-The app includes a manifest, theme color, SVG icons, and a small service worker for the app shell. For a public app-store-grade release, replace placeholder SVG icons with final PNG exports at standard sizes.
+The app includes a manifest, theme color, SVG icons, the supplied Vybz logo, and a small service worker for the app shell. For a public app-store-grade release, replace placeholder SVG icons with final PNG exports at standard sizes.

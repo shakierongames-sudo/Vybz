@@ -1,0 +1,24 @@
+{
+  "name": "Vybz",
+  "short_name": "Vybz",
+  "description": "Post moments and rate the vibe from 1 to 5 stars.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#06140F",
+  "theme_color": "#06140F",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
