@@ -74,13 +74,6 @@ do $$
 begin
   if exists (
     select 1 from information_schema.columns
-    where table_schema = 'public' and table_name = 'profiles' and column_name = 'handle'
-  ) then
-    update public.profiles set username = lower(handle) where username is null;
-  end if;
-
-  if exists (
-    select 1 from information_schema.columns
     where table_schema = 'public' and table_name = 'profiles' and column_name = 'role'
   ) then
     update public.profiles set is_admin = true where role::text = 'admin';

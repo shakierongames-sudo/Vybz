@@ -14,7 +14,6 @@ import type {
 type ProfileRow = {
   id: string;
   username?: string | null;
-  handle?: string | null;
   display_name: string | null;
   bio: string | null;
   avatar_url: string | null;
@@ -155,7 +154,7 @@ export async function uploadPublicImage(bucket: "avatars" | "post-images", userI
 function mapProfile(row: ProfileRow): VybzProfile {
   return {
     id: row.id,
-    username: row.username ?? row.handle ?? "vybz",
+    username: row.username ?? "vybz",
     displayName: row.display_name ?? "Vybz user",
     bio: row.bio ?? "",
     avatarUrl: row.avatar_url,
@@ -230,7 +229,7 @@ export async function loadAppData(userId: string): Promise<AppData> {
   const profileResult = await client
     .from("profiles")
     .select(
-      "id,username,handle,display_name,bio,avatar_url,vibe_color,status,is_admin,public_score_enabled,created_at,updated_at",
+      "id,username,display_name,bio,avatar_url,vibe_color,status,is_admin,public_score_enabled,created_at,updated_at",
     )
     .eq("id", userId)
     .maybeSingle();
@@ -257,7 +256,7 @@ export async function loadAppData(userId: string): Promise<AppData> {
     client
       .from("profiles")
       .select(
-        "id,username,handle,display_name,bio,avatar_url,vibe_color,status,is_admin,public_score_enabled,created_at,updated_at",
+        "id,username,display_name,bio,avatar_url,vibe_color,status,is_admin,public_score_enabled,created_at,updated_at",
       )
       .order("display_name"),
     client

@@ -63,6 +63,7 @@ type LayoutGuardProps = {
   currentUser: VybzProfile;
   authReady: boolean;
   dataLoading: boolean;
+  profileReady: boolean;
   requireProfile: boolean;
   notice: AppNotice | null;
   onClearNotice: () => void;
@@ -74,11 +75,12 @@ function LayoutGuard({
   currentUser,
   authReady,
   dataLoading,
+  profileReady,
   requireProfile,
   notice,
   onClearNotice,
 }: LayoutGuardProps) {
-  if (!authReady || dataLoading) {
+  if (!authReady || dataLoading || !profileReady) {
     return <LoadingState />;
   }
 
@@ -127,6 +129,30 @@ function MissingEnvScreen() {
   );
 }
 
+type RootRouteProps = {
+  session: Session | null;
+  profile: VybzProfile | null;
+  authReady: boolean;
+  dataLoading: boolean;
+  profileReady: boolean;
+};
+
+function RootRoute({ session, profile, authReady, dataLoading, profileReady }: RootRouteProps) {
+  if (!authReady || dataLoading || !profileReady) {
+    return <LoadingState />;
+  }
+
+  if (session && profile) {
+    return <Navigate to="/feed" replace />;
+  }
+
+  if (session && !profile) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  return <Welcome />;
+}
+
 export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
@@ -140,8 +166,10 @@ export default function App() {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [notice, setNotice] = useState<AppNotice | null>(null);
+  const [profileLoadedForUserId, setProfileLoadedForUserId] = useState<string | null>(null);
 
   const currentUser = profile ?? createPlaceholderProfile(session);
+  const profileReady = !session?.user.id || profileLoadedForUserId === session.user.id;
 
   const refreshData = async (userId = session?.user.id) => {
     if (!userId || !isSupabaseConfigured) return;
@@ -156,6 +184,7 @@ export default function App() {
       setFollows(data.follows);
       setBlocks(data.blocks);
       setReports(data.reports);
+      setProfileLoadedForUserId(userId);
     } catch (error) {
       setNotice({ tone: "error", message: friendlyError(error) });
     } finally {
@@ -191,6 +220,7 @@ export default function App() {
         setFollows([]);
         setBlocks([]);
         setReports([]);
+        setProfileLoadedForUserId(null);
       }
     });
 
@@ -199,6 +229,7 @@ export default function App() {
 
   useEffect(() => {
     if (session?.user.id) {
+      setProfileLoadedForUserId(null);
       refreshData(session.user.id);
     }
   }, [session?.user.id]);
@@ -556,6 +587,7 @@ export default function App() {
     currentUser,
     authReady,
     dataLoading,
+    profileReady,
     notice,
     onClearNotice: () => setNotice(null),
   };
@@ -573,13 +605,24 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Welcome />} />
+        <Route
+          path="/"
+          element={
+            <RootRoute
+              session={session}
+              profile={profile}
+              authReady={authReady}
+              dataLoading={dataLoading}
+              profileReady={profileReady}
+            />
+          }
+        />
         <Route
           path="/login"
           element={
             <Login
               session={session}
-              hasProfile={Boolean(profile)}
+              hasProfile={profileReady && Boolean(profile)}
               loading={actionLoading}
               onLogin={handleLogin}
               onSignUp={handleSignUp}
@@ -592,11 +635,15 @@ export default function App() {
           <Route
             path="/onboarding"
             element={
-              <Onboarding
-                currentUser={currentUser}
-                loading={actionLoading}
-                onSave={handleSaveProfile}
-              />
+              profile ? (
+                <Navigate to="/feed" replace />
+              ) : (
+                <Onboarding
+                  currentUser={currentUser}
+                  loading={actionLoading}
+                  onSave={handleSaveProfile}
+                />
+              )
             }
           />
         </Route>
