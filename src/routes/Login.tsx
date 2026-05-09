@@ -1,7 +1,10 @@
-import { FormEvent, useState } from "react";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { FormEvent, useEffect, useState } from "react";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { LogIn, UserPlus } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
+import { LoadingState } from "../components/LoadingState";
+import { requireSupabase } from "../lib/supabaseClient";
+import { friendlyError } from "../lib/supabaseData";
 
 type AuthResult = {
   ok: boolean;
@@ -18,18 +21,64 @@ type LoginProps = {
 };
 
 export function Login({ session, hasProfile, loading, onLogin, onSignUp }: LoginProps) {
-  const [mode, setMode] = useState<"login" | "signup">("login");
+  const [searchParams] = useSearchParams();
+  const requestedMode = searchParams.get("mode") === "signup" ? "signup" : "login";
+  const [mode, setMode] = useState<"login" | "signup">(requestedMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [sessionTarget, setSessionTarget] = useState<"idle" | "checking" | "feed" | "onboarding">("idle");
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setMode(requestedMode);
+    setMessage("");
+  }, [requestedMode]);
+
+  useEffect(() => {
+    if (!session || hasProfile) {
+      setSessionTarget("idle");
+      return;
+    }
+
+    let active = true;
+    setSessionTarget("checking");
+    requireSupabase()
+      .from("profiles")
+      .select("id")
+      .eq("id", session.user.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!active) return;
+
+        if (error) {
+          setMessage(friendlyError(error));
+          setSessionTarget("idle");
+          return;
+        }
+
+        setSessionTarget(data ? "feed" : "onboarding");
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [session, hasProfile]);
 
   if (session && hasProfile) {
     return <Navigate to="/feed" replace />;
   }
 
-  if (session && !hasProfile) {
+  if (sessionTarget === "feed") {
+    return <Navigate to="/feed" replace />;
+  }
+
+  if (sessionTarget === "onboarding") {
     return <Navigate to="/onboarding" replace />;
+  }
+
+  if (sessionTarget === "checking") {
+    return <LoadingState />;
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -60,7 +109,9 @@ export function Login({ session, hasProfile, loading, onLogin, onSignUp }: Login
   return (
     <main className="auth-screen">
       <section className="auth-card">
-        <img src="/icons/icon.svg" alt="" />
+        <Link to="/" aria-label="Vybz welcome">
+          <img src="/icons/icon.svg" alt="" />
+        </Link>
         <p className="eyebrow">{mode === "login" ? "Welcome back" : "Join the pulse"}</p>
         <h1>{mode === "login" ? "Sign in to Vybz" : "Create Vybz account"}</h1>
         <form className="stack" onSubmit={handleSubmit}>

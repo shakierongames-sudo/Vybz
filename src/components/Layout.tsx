@@ -21,15 +21,22 @@ const titles: Record<string, string> = {
   "/admin": "Moderation",
 };
 
-export function Layout({ currentUser, isSupabaseConfigured, notice, onClearNotice }: LayoutProps) {
+export function Layout({
+  currentUser,
+  isSupabaseConfigured,
+  notice,
+  onClearNotice,
+}: LayoutProps) {
   const location = useLocation();
   const title = titles[location.pathname] ?? "Vybz";
+  const isOnboarding = location.pathname === "/onboarding";
+  const homePath = isOnboarding ? "/onboarding" : "/feed";
 
   return (
     <div className="app-frame">
       <main className="app-shell">
         <header className="top-bar">
-          <Link to="/feed" className="brand-mark" aria-label="Vybz home">
+          <Link to={homePath} className="brand-mark" aria-label="Vybz home">
             <img src="/icons/icon.svg" alt="" />
             <span>Vybz</span>
           </Link>
@@ -56,7 +63,7 @@ export function Layout({ currentUser, isSupabaseConfigured, notice, onClearNotic
         ) : null}
         <Outlet />
       </main>
-      <BottomNav />
+      {isOnboarding ? null : <BottomNav />}
     </div>
   );
 }

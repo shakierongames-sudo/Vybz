@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Sparkles, Star } from "lucide-react";
+import { ArrowRight, LogIn, Star } from "lucide-react";
 
 export function Welcome() {
   return (
@@ -10,13 +10,13 @@ export function Welcome() {
         <h1>Vybz</h1>
         <p>Post the moment. Rate the feeling. Keep the day glowing.</p>
         <div className="welcome-hero__actions">
-          <Link className="primary-button" to="/login">
-            Start
+          <Link className="primary-button" to="/login?mode=signup">
+            Sign up
             <ArrowRight size={18} aria-hidden="true" />
           </Link>
-          <Link className="secondary-button" to="/feed">
-            Preview feed
-            <Sparkles size={18} aria-hidden="true" />
+          <Link className="secondary-button" to="/login">
+            Log in
+            <LogIn size={18} aria-hidden="true" />
           </Link>
         </div>
       </section>
