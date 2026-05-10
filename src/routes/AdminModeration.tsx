@@ -86,7 +86,7 @@ export function AdminModeration({
             );
           })
         ) : (
-          <p className="muted-copy">No open reports.</p>
+          <p className="muted-copy">No reports open. Everything looks calm.</p>
         )}
       </section>
 

@@ -126,7 +126,17 @@ export function Profile({
           ))}
         </div>
       ) : (
-        <EmptyState title="No visible moments" body="Moments from this profile will appear here." />
+        <EmptyState
+          title="No posts yet"
+          body={isOwnProfile ? "Post your first vibe." : "This profile has not shared a public vibe yet."}
+          action={
+            isOwnProfile ? (
+              <Link className="primary-button" to="/post">
+                Create post
+              </Link>
+            ) : undefined
+          }
+        />
       )}
 
       <ReportModal

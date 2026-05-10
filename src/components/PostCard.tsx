@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Clock, MessageCircle, MoreHorizontal, Trash2 } from "lucide-react";
 import { Avatar } from "./Avatar";
 import { CategoryPill } from "./CategoryPill";
+import { PostImage } from "./PostImage";
 import { StarRating } from "./StarRating";
 import type { PostWithMeta, VybzProfile } from "../lib/types";
 
@@ -44,7 +45,7 @@ export function PostCard({ post, currentUser, onRate, onDelete, onReportClick }:
       </header>
 
       <Link to={`/post/${post.id}`} className="post-card__body">
-        <img className="post-card__image" src={post.imageUrl} alt="" loading="lazy" />
+        <PostImage src={post.imageUrl} />
         {post.caption ? <p>{post.caption}</p> : null}
       </Link>
 

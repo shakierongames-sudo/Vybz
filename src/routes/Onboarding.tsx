@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
-import { normalizeUsername, validateImage } from "../lib/supabaseData";
+import { getImageSizeHint, normalizeUsername, validateImage, validateUsername } from "../lib/supabaseData";
 import type { ProfileInput, VybzProfile } from "../lib/types";
 
 type OnboardingProps = {
@@ -21,6 +21,7 @@ export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState(currentUser.avatarUrl);
   const [message, setMessage] = useState("");
+  const [imageHint, setImageHint] = useState("");
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -37,10 +38,12 @@ export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
     const validationError = validateImage(file);
     if (validationError) {
       setMessage(validationError);
+      setImageHint("");
       return;
     }
 
     setMessage("");
+    setImageHint(getImageSizeHint(file));
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
   };
@@ -49,8 +52,9 @@ export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
     event.preventDefault();
     setMessage("");
 
-    if (username.length < 3) {
-      setMessage("Username must be at least 3 characters.");
+    const usernameError = validateUsername(username);
+    if (usernameError) {
+      setMessage(usernameError);
       return;
     }
 
@@ -61,6 +65,8 @@ export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
         bio,
         vibeColor,
         publicScoreEnabled: currentUser.publicScoreEnabled,
+        soundEffectsEnabled: currentUser.soundEffectsEnabled,
+        hapticsEnabled: currentUser.hapticsEnabled,
       },
       avatarFile,
     );
@@ -116,6 +122,7 @@ export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
             onChange={(event) => handleAvatarChange(event.target.files?.[0])}
           />
         </label>
+        {imageHint ? <p className="muted-copy">{imageHint}</p> : null}
         <fieldset className="swatch-field">
           <legend>Vibe color</legend>
           <div>

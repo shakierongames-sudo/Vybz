@@ -41,11 +41,11 @@ export function Feed({ posts, currentUser, onRate, onDeletePost, onReportPost }:
         </div>
       ) : (
         <EmptyState
-          title="No moments yet"
-          body="The feed will light up when public posts are available."
+          title="No posts yet"
+          body="Post your first vibe."
           action={
             <Link className="primary-button" to="/post">
-              Create one
+              Post a vibe
             </Link>
           }
         />

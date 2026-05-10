@@ -2,6 +2,14 @@ export type UserStatus = "active" | "suspended" | "banned";
 export type PostStatus = "active" | "under_review" | "removed";
 export type PostVisibility = "public" | "followers";
 export type ReportStatus = "open" | "reviewing" | "dismissed" | "resolved";
+export type ActivityType =
+  | "post_rated"
+  | "user_followed"
+  | "post_created"
+  | "post_milestone"
+  | "post_removed"
+  | "report_resolved"
+  | "report_reviewed";
 
 export type VybzProfile = {
   id: string;
@@ -13,6 +21,9 @@ export type VybzProfile = {
   status: UserStatus;
   isAdmin: boolean;
   publicScoreEnabled: boolean;
+  soundEffectsEnabled: boolean;
+  hapticsEnabled: boolean;
+  usernameUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -64,6 +75,18 @@ export type Block = {
   createdAt: string;
 };
 
+export type ActivityNotification = {
+  id: string;
+  userId: string;
+  actorId: string | null;
+  postId: string | null;
+  type: ActivityType;
+  title: string;
+  body: string | null;
+  readAt: string | null;
+  createdAt: string;
+};
+
 export type PostWithMeta = VybzPost & {
   author: VybzProfile;
   averageRating: number;
@@ -77,6 +100,8 @@ export type ProfileInput = {
   bio: string;
   vibeColor: string;
   publicScoreEnabled: boolean;
+  soundEffectsEnabled?: boolean;
+  hapticsEnabled?: boolean;
 };
 
 export type AgeGateInput = {

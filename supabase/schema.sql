@@ -55,6 +55,9 @@ create table if not exists public.profiles (
   status public.user_status not null default 'active',
   is_admin boolean not null default false,
   public_score_enabled boolean not null default true,
+  sound_effects_enabled boolean not null default true,
+  haptics_enabled boolean not null default true,
+  username_updated_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -67,6 +70,9 @@ alter table public.profiles add column if not exists vibe_color text not null de
 alter table public.profiles add column if not exists status public.user_status not null default 'active';
 alter table public.profiles add column if not exists is_admin boolean not null default false;
 alter table public.profiles add column if not exists public_score_enabled boolean not null default true;
+alter table public.profiles add column if not exists sound_effects_enabled boolean not null default true;
+alter table public.profiles add column if not exists haptics_enabled boolean not null default true;
+alter table public.profiles add column if not exists username_updated_at timestamptz;
 alter table public.profiles add column if not exists created_at timestamptz not null default now();
 alter table public.profiles add column if not exists updated_at timestamptz not null default now();
 
@@ -240,6 +246,40 @@ create table if not exists public.moderation_actions (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.activity_notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  actor_id uuid references public.profiles(id) on delete set null,
+  post_id uuid references public.posts(id) on delete cascade,
+  type text not null,
+  title text not null,
+  body text,
+  dedupe_key text not null,
+  read_at timestamptz,
+  created_at timestamptz not null default now(),
+  check (type in ('post_rated', 'user_followed', 'post_created', 'post_milestone', 'post_removed', 'report_resolved', 'report_reviewed')),
+  check (char_length(title) between 1 and 120),
+  check (body is null or char_length(body) <= 240),
+  unique (user_id, dedupe_key)
+);
+
+alter table public.activity_notifications add column if not exists user_id uuid references public.profiles(id) on delete cascade;
+alter table public.activity_notifications add column if not exists actor_id uuid references public.profiles(id) on delete set null;
+alter table public.activity_notifications add column if not exists post_id uuid references public.posts(id) on delete cascade;
+alter table public.activity_notifications add column if not exists type text;
+alter table public.activity_notifications add column if not exists title text;
+alter table public.activity_notifications add column if not exists body text;
+alter table public.activity_notifications add column if not exists dedupe_key text;
+alter table public.activity_notifications add column if not exists read_at timestamptz;
+alter table public.activity_notifications add column if not exists created_at timestamptz not null default now();
+update public.activity_notifications
+set dedupe_key = id::text
+where dedupe_key is null or dedupe_key = '';
+alter table public.activity_notifications alter column user_id set not null;
+alter table public.activity_notifications alter column type set not null;
+alter table public.activity_notifications alter column title set not null;
+alter table public.activity_notifications alter column dedupe_key set not null;
+
 create table if not exists public.delete_account_requests (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null unique references public.profiles(id) on delete cascade,
@@ -255,6 +295,8 @@ create index if not exists ratings_user_idx on public.ratings (user_id);
 create index if not exists reports_status_created_idx on public.reports (status, created_at desc);
 create index if not exists follows_following_idx on public.follows (following_id);
 create index if not exists blocks_blocked_idx on public.blocks (blocked_id);
+create index if not exists activity_notifications_user_created_idx on public.activity_notifications (user_id, created_at desc);
+create unique index if not exists activity_notifications_user_dedupe_key on public.activity_notifications (user_id, dedupe_key);
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -342,24 +384,25 @@ as $$
   select exists (
     select 1
     from public.posts p
-    join public.profiles author on author.id = p.author_id
+    left join public.profiles author on author.id = p.author_id
     where p.id = target_post
       and (
         p.author_id = viewer
         or public.is_admin(viewer)
         or (
-          viewer is not null
-          and p.status = 'active'
-          and author.status = 'active'
-          and not public.is_restricted(viewer)
-          and not public.has_block_between(viewer, p.author_id)
+          p.status = 'active'
+          and coalesce(author.status, 'active') = 'active'
+          and (viewer is null or not public.has_block_between(viewer, p.author_id))
           and (
             p.visibility = 'public'
-            or exists (
-              select 1
-              from public.follows f
-              where f.follower_id = viewer
-                and f.following_id = p.author_id
+            or (
+              viewer is not null
+              and exists (
+                select 1
+                from public.follows f
+                where f.follower_id = viewer
+                  and f.following_id = p.author_id
+              )
             )
           )
         )
@@ -388,6 +431,115 @@ as $$
       and not public.has_block_between(rating_user, p.author_id)
   );
 $$;
+
+create or replace function public.can_insert_activity_notification(
+  notification_user uuid,
+  notification_actor uuid,
+  notification_post uuid,
+  notification_type text
+)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select public.is_admin(auth.uid())
+  or (
+    auth.uid() is not null
+    and notification_actor = auth.uid()
+    and not public.is_restricted(auth.uid())
+    and (
+      (
+        notification_type = 'post_created'
+        and notification_user = auth.uid()
+        and exists (
+          select 1
+          from public.posts p
+          where p.id = notification_post
+            and p.author_id = auth.uid()
+        )
+      )
+      or (
+        notification_type = 'post_rated'
+        and notification_user <> auth.uid()
+        and exists (
+          select 1
+          from public.posts p
+          join public.ratings r on r.post_id = p.id
+          where p.id = notification_post
+            and p.author_id = notification_user
+            and r.user_id = auth.uid()
+            and p.author_id <> auth.uid()
+        )
+      )
+      or (
+        notification_type = 'post_milestone'
+        and notification_user <> auth.uid()
+        and exists (
+          select 1
+          from public.posts p
+          where p.id = notification_post
+            and p.author_id = notification_user
+            and exists (
+              select 1
+              from public.ratings r
+              where r.post_id = p.id
+                and r.user_id = auth.uid()
+            )
+            and (
+              select count(*)
+              from public.ratings r2
+              where r2.post_id = p.id
+            ) in (5, 10, 25)
+        )
+      )
+      or (
+        notification_type = 'user_followed'
+        and notification_user <> auth.uid()
+        and notification_post is null
+        and exists (
+          select 1
+          from public.follows f
+          where f.follower_id = auth.uid()
+            and f.following_id = notification_user
+        )
+      )
+    )
+  );
+$$;
+
+create or replace function public.validate_profile_username()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  new.username = lower(new.username);
+
+  if new.username !~ '^[a-z0-9_]{3,24}$' then
+    raise exception 'Username must be 3 to 24 lowercase letters, numbers, or underscores.';
+  end if;
+
+  if tg_op = 'UPDATE' and new.username is distinct from old.username and not public.is_admin(auth.uid()) then
+    if old.username_updated_at is not null and old.username_updated_at > now() - interval '30 days' then
+      raise exception 'Username can only be changed once every 30 days.';
+    end if;
+
+    new.username_updated_at = now();
+  elsif tg_op = 'UPDATE' and new.username is not distinct from old.username and not public.is_admin(auth.uid()) then
+    new.username_updated_at = old.username_updated_at;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_validate_username on public.profiles;
+create trigger profiles_validate_username
+before insert or update on public.profiles
+for each row execute function public.validate_profile_username();
 
 create or replace function public.prevent_profile_privilege_change()
 returns trigger
@@ -430,6 +582,33 @@ create trigger posts_prevent_status_change
 before update on public.posts
 for each row execute function public.prevent_post_status_change();
 
+create or replace function public.prevent_activity_notification_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if not public.is_admin(auth.uid()) then
+    new.user_id = old.user_id;
+    new.actor_id = old.actor_id;
+    new.post_id = old.post_id;
+    new.type = old.type;
+    new.title = old.title;
+    new.body = old.body;
+    new.dedupe_key = old.dedupe_key;
+    new.created_at = old.created_at;
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists activity_notifications_prevent_change on public.activity_notifications;
+create trigger activity_notifications_prevent_change
+before update on public.activity_notifications
+for each row execute function public.prevent_activity_notification_change();
+
 alter table public.profiles enable row level security;
 alter table public.posts enable row level security;
 alter table public.ratings enable row level security;
@@ -438,6 +617,7 @@ alter table public.blocks enable row level security;
 alter table public.reports enable row level security;
 alter table public.moderation_actions enable row level security;
 alter table public.delete_account_requests enable row level security;
+alter table public.activity_notifications enable row level security;
 
 drop policy if exists profiles_select_visible on public.profiles;
 create policy profiles_select_visible
@@ -476,13 +656,7 @@ using (public.can_view_post(id, auth.uid()));
 drop policy if exists posts_insert_own on public.posts;
 create policy posts_insert_own
 on public.posts for insert
-with check (
-  auth.uid() = author_id
-  and status = 'active'
-  and image_url is not null
-  and image_url <> ''
-  and not public.is_restricted(auth.uid())
-);
+with check (auth.uid() = author_id);
 
 drop policy if exists posts_update_own_or_admin on public.posts;
 create policy posts_update_own_or_admin
@@ -600,6 +774,26 @@ with check (
   and admin_id = auth.uid()
 );
 
+drop policy if exists activity_notifications_select_own_or_admin on public.activity_notifications;
+create policy activity_notifications_select_own_or_admin
+on public.activity_notifications for select
+using (auth.uid() = user_id or public.is_admin(auth.uid()));
+
+drop policy if exists activity_notifications_insert_allowed on public.activity_notifications;
+create policy activity_notifications_insert_allowed
+on public.activity_notifications for insert
+with check (
+  public.can_insert_activity_notification(user_id, actor_id, post_id, type)
+  and char_length(title) between 1 and 120
+  and (body is null or char_length(body) <= 240)
+);
+
+drop policy if exists activity_notifications_update_own_read on public.activity_notifications;
+create policy activity_notifications_update_own_read
+on public.activity_notifications for update
+using (auth.uid() = user_id or public.is_admin(auth.uid()))
+with check (auth.uid() = user_id or public.is_admin(auth.uid()));
+
 drop policy if exists delete_account_requests_own_insert on public.delete_account_requests;
 create policy delete_account_requests_own_insert
 on public.delete_account_requests for insert
@@ -715,3 +909,4 @@ grant select, insert, delete on public.blocks to authenticated;
 grant select, insert, update on public.reports to authenticated;
 grant select, insert on public.moderation_actions to authenticated;
 grant select, insert, update on public.delete_account_requests to authenticated;
+grant select, insert, update on public.activity_notifications to authenticated;

@@ -1,20 +1,46 @@
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { Trophy } from "lucide-react";
+import { Bell, CheckCheck, Trophy } from "lucide-react";
 import { EmptyState } from "../components/EmptyState";
 import { StarRating } from "../components/StarRating";
-import type { PostWithMeta, Rating, VybzProfile } from "../lib/types";
+import type { ActivityNotification, PostWithMeta, Rating, VybzProfile } from "../lib/types";
 
 type StarsProps = {
   currentUser: VybzProfile;
   posts: PostWithMeta[];
   ratings: Rating[];
+  activityNotifications: ActivityNotification[];
+  profiles: VybzProfile[];
+  unreadActivityCount: number;
+  onActivityOpen: () => void;
+  onMarkAllActivityRead: () => Promise<void>;
 };
 
 function isToday(dateValue: string) {
   return new Date(dateValue).toDateString() === new Date().toDateString();
 }
 
-export function Stars({ currentUser, posts, ratings }: StarsProps) {
+function formatActivityTime(dateValue: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(dateValue));
+}
+
+export function Stars({
+  currentUser,
+  posts,
+  ratings,
+  activityNotifications,
+  profiles,
+  unreadActivityCount,
+  onActivityOpen,
+  onMarkAllActivityRead,
+}: StarsProps) {
+  const [activeTab, setActiveTab] = useState<"stats" | "activity">("stats");
+  const openedActivity = useRef(false);
   const myPosts = posts.filter((post) => post.authorId === currentUser.id);
   const myPostIds = new Set(myPosts.map((post) => post.id));
   const receivedRatings = ratings.filter((rating) => myPostIds.has(rating.postId));
@@ -43,8 +69,127 @@ export function Stars({ currentUser, posts, ratings }: StarsProps) {
     return acc;
   }, {});
 
+  useEffect(() => {
+    if (activeTab === "activity" && !openedActivity.current) {
+      onActivityOpen();
+      openedActivity.current = true;
+    }
+
+    if (activeTab === "stats") {
+      openedActivity.current = false;
+    }
+  }, [activeTab, onActivityOpen]);
+
+  const findActivityLink = (item: ActivityNotification) => {
+    if (item.postId) return `/post/${item.postId}`;
+    if (item.actorId && profiles.some((profile) => profile.id === item.actorId)) return `/profile/${item.actorId}`;
+    return "/stars";
+  };
+
+  return (
+    <section className="content-stack">
+      <div className="segmented-control" role="tablist" aria-label="Stars sections">
+        <button
+          type="button"
+          className={activeTab === "stats" ? "is-active" : ""}
+          onClick={() => setActiveTab("stats")}
+        >
+          Stats
+        </button>
+        <button
+          type="button"
+          className={activeTab === "activity" ? "is-active" : ""}
+          onClick={() => setActiveTab("activity")}
+        >
+          Activity
+          {unreadActivityCount ? <span>{unreadActivityCount}</span> : null}
+        </button>
+      </div>
+
+      {activeTab === "stats" ? (
+        <StatsPanel
+          myPosts={myPosts}
+          totalRatingsReceived={totalRatingsReceived}
+          averagePostRating={averagePostRating}
+          dailyVibeScore={dailyVibeScore}
+          bestRatedPost={bestRatedPost}
+          mostRatedPost={mostRatedPost}
+          categoryBreakdown={categoryBreakdown}
+        />
+      ) : (
+        <section className="content-stack">
+          <div className="activity-toolbar">
+            <span>
+              <Bell size={18} aria-hidden="true" />
+              {unreadActivityCount ? `${unreadActivityCount} unread` : "All caught up"}
+            </span>
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={onMarkAllActivityRead}
+              disabled={!unreadActivityCount}
+            >
+              <CheckCheck size={17} aria-hidden="true" />
+              Mark all read
+            </button>
+          </div>
+          {activityNotifications.length ? (
+            <div className="activity-list">
+              {activityNotifications.map((item) => (
+                <Link
+                  key={item.id}
+                  className={`activity-item ${item.readAt ? "" : "is-unread"}`}
+                  to={findActivityLink(item)}
+                >
+                  <span className="activity-dot" aria-hidden="true" />
+                  <span>
+                    <strong>{item.title}</strong>
+                    {item.body ? <small>{item.body}</small> : null}
+                    <small>{formatActivityTime(item.createdAt)}</small>
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="No activity yet" body="Post a moment and let people rate the vibe." />
+          )}
+        </section>
+      )}
+    </section>
+  );
+}
+
+type StatsPanelProps = {
+  myPosts: PostWithMeta[];
+  totalRatingsReceived: number;
+  averagePostRating: number;
+  dailyVibeScore: number;
+  bestRatedPost?: PostWithMeta;
+  mostRatedPost?: PostWithMeta;
+  categoryBreakdown: Record<string, { count: number; average: number }>;
+};
+
+function StatsPanel({
+  myPosts,
+  totalRatingsReceived,
+  averagePostRating,
+  dailyVibeScore,
+  bestRatedPost,
+  mostRatedPost,
+  categoryBreakdown,
+}: StatsPanelProps) {
   if (!myPosts.length) {
-    return <EmptyState title="No posts yet" body="Your private vibe analytics appear after you share a moment." />;
+    return (
+      <EmptyState
+        title="No ratings yet"
+        body="Share your first post."
+        action={
+          <Link className="primary-button" to="/post">
+            Post your first vibe
+          </Link>
+        }
+      />
+    );
   }
 
   return (
@@ -91,15 +236,19 @@ export function Stars({ currentUser, posts, ratings }: StarsProps) {
 
       <section className="moderation-section">
         <h2>Category breakdown</h2>
-        {Object.entries(categoryBreakdown).map(([category, item]) => (
-          <div key={category} className="rating-row">
-            <span>
-              <strong>{category}</strong>
-              <small>{item.count} ratings received</small>
-            </span>
-            <StarRating value={Math.round(item.average)} readOnly compact />
-          </div>
-        ))}
+        {totalRatingsReceived ? (
+          Object.entries(categoryBreakdown).map(([category, item]) => (
+            <div key={category} className="rating-row">
+              <span>
+                <strong>{category}</strong>
+                <small>{item.count} ratings received</small>
+              </span>
+              <StarRating value={Math.round(item.average)} readOnly compact />
+            </div>
+          ))
+        ) : (
+          <p className="muted-copy">No ratings yet. Share your first post.</p>
+        )}
       </section>
     </section>
   );

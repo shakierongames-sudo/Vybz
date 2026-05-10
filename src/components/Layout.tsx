@@ -7,6 +7,7 @@ import type { AppNotice, VybzProfile } from "../lib/types";
 type LayoutProps = {
   currentUser: VybzProfile;
   isSupabaseConfigured: boolean;
+  unreadActivityCount: number;
   notice?: AppNotice | null;
   onClearNotice?: () => void;
 };
@@ -24,6 +25,7 @@ const titles: Record<string, string> = {
 export function Layout({
   currentUser,
   isSupabaseConfigured,
+  unreadActivityCount,
   notice,
   onClearNotice,
 }: LayoutProps) {
@@ -63,7 +65,7 @@ export function Layout({
         ) : null}
         <Outlet />
       </main>
-      {isOnboarding ? null : <BottomNav />}
+      {isOnboarding ? null : <BottomNav unreadActivityCount={unreadActivityCount} />}
     </div>
   );
 }

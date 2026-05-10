@@ -9,15 +9,23 @@ const tabs = [
   { to: "/me", label: "Me", icon: UserRound },
 ];
 
-export function BottomNav() {
+type BottomNavProps = {
+  unreadActivityCount: number;
+};
+
+export function BottomNav({ unreadActivityCount }: BottomNavProps) {
   return (
     <nav className="bottom-nav" aria-label="Primary">
       {tabs.map((tab) => {
         const Icon = tab.icon;
+        const showBadge = tab.to === "/stars" && unreadActivityCount > 0;
 
         return (
           <NavLink key={tab.to} to={tab.to} className="bottom-nav__link">
-            <Icon size={22} aria-hidden="true" />
+            <span className="nav-icon-wrap">
+              <Icon size={22} aria-hidden="true" />
+              {showBadge ? <span className="nav-badge">{Math.min(unreadActivityCount, 9)}</span> : null}
+            </span>
             <span>{tab.label}</span>
           </NavLink>
         );

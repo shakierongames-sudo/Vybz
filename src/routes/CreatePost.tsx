@@ -2,7 +2,7 @@ import { FormEvent, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ImagePlus, Send } from "lucide-react";
 import { moods } from "../lib/constants";
-import { validateImage } from "../lib/supabaseData";
+import { getImageSizeHint, validateImage } from "../lib/supabaseData";
 import type { CreatePostInput, PostVisibility } from "../lib/types";
 
 type CreatePostProps = {
@@ -21,6 +21,7 @@ export function CreatePost({ categories, loading, onCreate }: CreatePostProps) {
   const [ratingEnabled, setRatingEnabled] = useState(true);
   const [dailyVibe, setDailyVibe] = useState(false);
   const [message, setMessage] = useState("");
+  const [imageHint, setImageHint] = useState("");
   const navigate = useNavigate();
 
   const handleImageChange = (file: File | undefined) => {
@@ -29,10 +30,12 @@ export function CreatePost({ categories, loading, onCreate }: CreatePostProps) {
     const validationError = validateImage(file);
     if (validationError) {
       setMessage(validationError);
+      setImageHint("");
       return;
     }
 
     setMessage("");
+    setImageHint(getImageSizeHint(file));
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   };
@@ -65,7 +68,7 @@ export function CreatePost({ categories, loading, onCreate }: CreatePostProps) {
     <form className="form-card stack" onSubmit={handleSubmit}>
       <label className="image-picker">
         {imagePreview ? (
-          <img src={imagePreview} alt="" />
+          <img src={imagePreview} alt="" decoding="async" />
         ) : (
           <span>
             <ImagePlus size={28} aria-hidden="true" />
@@ -78,6 +81,7 @@ export function CreatePost({ categories, loading, onCreate }: CreatePostProps) {
           onChange={(event) => handleImageChange(event.target.files?.[0])}
         />
       </label>
+      {imageHint ? <p className="muted-copy">{imageHint}</p> : null}
       <label className="field">
         <span>Caption</span>
         <textarea

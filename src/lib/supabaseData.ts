@@ -1,6 +1,8 @@
 import { imageRules, normalizeCategory } from "./constants";
 import { requireSupabase } from "./supabaseClient";
 import type {
+  ActivityNotification,
+  ActivityType,
   Block,
   Follow,
   PostWithMeta,
@@ -21,6 +23,9 @@ type ProfileRow = {
   status: UserStatus | "blocked";
   is_admin: boolean | null;
   public_score_enabled: boolean | null;
+  sound_effects_enabled?: boolean | null;
+  haptics_enabled?: boolean | null;
+  username_updated_at?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -73,6 +78,18 @@ type BlockRow = {
   created_at: string;
 };
 
+type ActivityNotificationRow = {
+  id: string;
+  user_id: string;
+  actor_id: string | null;
+  post_id: string | null;
+  type: ActivityType;
+  title: string;
+  body: string | null;
+  read_at: string | null;
+  created_at: string;
+};
+
 export type AppData = {
   profile: VybzProfile | null;
   profiles: VybzProfile[];
@@ -81,10 +98,18 @@ export type AppData = {
   follows: Follow[];
   blocks: Block[];
   reports: Report[];
+  activityNotifications: ActivityNotification[];
 };
 
 export function normalizeUsername(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9_]/g, "").slice(0, 24);
+}
+
+export function validateUsername(value: string) {
+  if (!value) return "Choose a username.";
+  if (value.length < 3 || value.length > 24) return "Username must be 3 to 24 characters.";
+  if (!/^[a-z0-9_]+$/.test(value)) return "Use lowercase letters, numbers, and underscores only.";
+  return "";
 }
 
 export function friendlyError(error: unknown) {
@@ -95,6 +120,14 @@ export function friendlyError(error: unknown) {
 
   if (message.includes("profiles_username_key") || message.toLowerCase().includes("duplicate")) {
     return "That username is already taken.";
+  }
+
+  if (message.toLowerCase().includes("username can only be changed")) {
+    return "Username can only be changed once every 30 days.";
+  }
+
+  if (message.toLowerCase().includes("username must")) {
+    return "Use a username with 3 to 24 lowercase letters, numbers, or underscores.";
   }
 
   if (message.toLowerCase().includes("invalid login")) {
@@ -121,6 +154,14 @@ export function validateImage(file: File) {
 
   if (!imageRules.extensions.includes(extension)) {
     return "Use a JPG, PNG, or WebP image.";
+  }
+
+  return "";
+}
+
+export function getImageSizeHint(file: File) {
+  if (file.size > imageRules.maxBytes * 0.8) {
+    return "Large image selected. It may take a moment to upload.";
   }
 
   return "";
@@ -176,6 +217,9 @@ function mapProfile(row: ProfileRow): VybzProfile {
     status: row.status === "blocked" ? "suspended" : row.status,
     isAdmin: Boolean(row.is_admin),
     publicScoreEnabled: row.public_score_enabled ?? true,
+    soundEffectsEnabled: row.sound_effects_enabled ?? true,
+    hapticsEnabled: row.haptics_enabled ?? true,
+    usernameUpdatedAt: row.username_updated_at ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -238,6 +282,51 @@ function mapBlock(row: BlockRow): Block {
   };
 }
 
+function mapActivityNotification(row: ActivityNotificationRow): ActivityNotification {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    actorId: row.actor_id,
+    postId: row.post_id,
+    type: row.type,
+    title: row.title,
+    body: row.body,
+    readAt: row.read_at,
+    createdAt: row.created_at,
+  };
+}
+
+async function loadProfileExtras(userId: string) {
+  const client = requireSupabase();
+  const result = await client
+    .from("profiles")
+    .select("sound_effects_enabled,haptics_enabled,username_updated_at")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (result.error) {
+    return {};
+  }
+
+  return result.data ?? {};
+}
+
+async function loadActivityNotifications(userId: string) {
+  const client = requireSupabase();
+  const result = await client
+    .from("activity_notifications")
+    .select("id,user_id,actor_id,post_id,type,title,body,read_at,created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(80);
+
+  if (result.error) {
+    return [];
+  }
+
+  return ((result.data ?? []) as ActivityNotificationRow[]).map(mapActivityNotification);
+}
+
 export async function loadAppData(userId: string): Promise<AppData> {
   const client = requireSupabase();
   const profileResult = await client
@@ -261,12 +350,14 @@ export async function loadAppData(userId: string): Promise<AppData> {
       follows: [],
       blocks: [],
       reports: [],
+      activityNotifications: [],
     };
   }
 
-  const profile = mapProfile(profileResult.data as ProfileRow);
+  const profileExtras = await loadProfileExtras(userId);
+  const profile = mapProfile({ ...(profileResult.data as ProfileRow), ...profileExtras });
 
-  const [profilesResult, postsResult, followsResult, blocksResult] = await Promise.all([
+  const [profilesResult, postsResult, followsResult, blocksResult, activityNotifications] = await Promise.all([
     client
       .from("profiles")
       .select(
@@ -282,6 +373,7 @@ export async function loadAppData(userId: string): Promise<AppData> {
       .limit(120),
     client.from("follows").select("follower_id,following_id,created_at").eq("follower_id", userId),
     client.from("blocks").select("blocker_id,blocked_id,created_at").eq("blocker_id", userId),
+    loadActivityNotifications(userId),
   ]);
 
   if (profilesResult.error) throw profilesResult.error;
@@ -346,5 +438,6 @@ export async function loadAppData(userId: string): Promise<AppData> {
     follows,
     blocks,
     reports,
+    activityNotifications,
   };
 }

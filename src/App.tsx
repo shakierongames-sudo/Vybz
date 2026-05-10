@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import type { Session } from "@supabase/supabase-js";
 import { Layout } from "./components/Layout";
 import { LoadingState } from "./components/LoadingState";
@@ -9,10 +9,23 @@ import {
   friendlyError,
   loadAppData,
   normalizeUsername,
+  validateUsername,
   uploadPublicImage,
 } from "./lib/supabaseData";
+import {
+  playActivitySound,
+  playErrorSound,
+  playFollowSound,
+  playPostCreatedSound,
+  playRateSound,
+  setHapticsEnabled,
+  setSoundEffectsEnabled,
+  triggerHaptic,
+} from "./lib/sounds";
 import type {
   AppNotice,
+  ActivityNotification,
+  ActivityType,
   AgeGateInput,
   Block,
   CreatePostInput,
@@ -53,6 +66,9 @@ function createPlaceholderProfile(session: Session | null): VybzProfile {
     status: "active",
     isAdmin: false,
     publicScoreEnabled: true,
+    soundEffectsEnabled: true,
+    hapticsEnabled: true,
+    usernameUpdatedAt: null,
     createdAt: now,
     updatedAt: now,
   };
@@ -66,6 +82,9 @@ type LayoutGuardProps = {
   dataLoading: boolean;
   profileReady: boolean;
   requireProfile: boolean;
+  loadError: string;
+  onRetryLoad: () => void;
+  unreadActivityCount: number;
   notice: AppNotice | null;
   onClearNotice: () => void;
 };
@@ -78,9 +97,16 @@ function LayoutGuard({
   dataLoading,
   profileReady,
   requireProfile,
+  loadError,
+  onRetryLoad,
+  unreadActivityCount,
   notice,
   onClearNotice,
 }: LayoutGuardProps) {
+  if (loadError) {
+    return <LoadTroubleScreen onRetry={onRetryLoad} />;
+  }
+
   if (!authReady || dataLoading || !profileReady) {
     return <LoadingState />;
   }
@@ -97,6 +123,7 @@ function LayoutGuard({
     <Layout
       currentUser={currentUser}
       isSupabaseConfigured={isSupabaseConfigured}
+      unreadActivityCount={unreadActivityCount}
       notice={notice}
       onClearNotice={onClearNotice}
     />
@@ -130,15 +157,50 @@ function MissingEnvScreen() {
   );
 }
 
+function LoadTroubleScreen({ onRetry }: { onRetry: () => void }) {
+  return (
+    <main className="auth-screen">
+      <section className="auth-card">
+        <img src="/icons/icon.svg" alt="" />
+        <p className="eyebrow">Loading issue</p>
+        <h1>Vybz had trouble loading.</h1>
+        <p className="muted-copy">Tap to retry.</p>
+        <div className="stack">
+          <button className="primary-button" type="button" onClick={onRetry}>
+            Retry
+          </button>
+          <Link className="secondary-button" to="/login">
+            Go to login
+          </Link>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 type RootRouteProps = {
   session: Session | null;
   profile: VybzProfile | null;
   authReady: boolean;
   dataLoading: boolean;
   profileReady: boolean;
+  loadError: string;
+  onRetryLoad: () => void;
 };
 
-function RootRoute({ session, profile, authReady, dataLoading, profileReady }: RootRouteProps) {
+function RootRoute({
+  session,
+  profile,
+  authReady,
+  dataLoading,
+  profileReady,
+  loadError,
+  onRetryLoad,
+}: RootRouteProps) {
+  if (loadError) {
+    return <LoadTroubleScreen onRetry={onRetryLoad} />;
+  }
+
   if (!authReady || dataLoading || !profileReady) {
     return <LoadingState />;
   }
@@ -166,18 +228,22 @@ export default function App() {
   const [follows, setFollows] = useState<Follow[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [activityNotifications, setActivityNotifications] = useState<ActivityNotification[]>([]);
   const [notice, setNotice] = useState<AppNotice | null>(null);
+  const [loadError, setLoadError] = useState("");
   const [profileLoadedForUserId, setProfileLoadedForUserId] = useState<string | null>(null);
 
   const currentUser = profile ?? createPlaceholderProfile(session);
   const profileReady = !session?.user.id || profileLoadedForUserId === session.user.id;
   const isRestrictedUser = currentUser.status !== "active";
   const restrictedMessage = "Your account is restricted.";
+  const unreadActivityCount = activityNotifications.filter((item) => !item.readAt).length;
 
   const refreshData = async (userId = session?.user.id) => {
     if (!userId || !isSupabaseConfigured) return;
 
     setDataLoading(true);
+    setLoadError("");
     try {
       const data = await loadAppData(userId);
       setProfile(data.profile);
@@ -187,9 +253,13 @@ export default function App() {
       setFollows(data.follows);
       setBlocks(data.blocks);
       setReports(data.reports);
+      setActivityNotifications(data.activityNotifications);
       setProfileLoadedForUserId(userId);
     } catch (error) {
-      setNotice({ tone: "error", message: friendlyError(error) });
+      const message = friendlyError(error);
+      setLoadError(message);
+      setNotice({ tone: "error", message });
+      playErrorSound();
     } finally {
       setDataLoading(false);
     }
@@ -202,19 +272,30 @@ export default function App() {
     }
 
     const client = requireSupabase();
-    client.auth.getSession().then(({ data, error }) => {
-      if (error) {
-        setNotice({ tone: "error", message: friendlyError(error) });
-      }
+    client.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (error) {
+          const message = friendlyError(error);
+          setLoadError(message);
+          setNotice({ tone: "error", message });
+        }
 
-      setSession(data.session);
-      setAuthReady(true);
-    });
+        setSession(data.session);
+        setAuthReady(true);
+      })
+      .catch((error) => {
+        const message = friendlyError(error);
+        setLoadError(message);
+        setNotice({ tone: "error", message });
+        setAuthReady(true);
+      });
 
     const {
       data: { subscription },
     } = client.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession);
+      setLoadError("");
       if (!nextSession) {
         setProfile(null);
         setProfiles([]);
@@ -223,6 +304,7 @@ export default function App() {
         setFollows([]);
         setBlocks([]);
         setReports([]);
+        setActivityNotifications([]);
         setProfileLoadedForUserId(null);
       }
     });
@@ -236,6 +318,11 @@ export default function App() {
       refreshData(session.user.id);
     }
   }, [session?.user.id]);
+
+  useEffect(() => {
+    setSoundEffectsEnabled(currentUser.soundEffectsEnabled);
+    setHapticsEnabled(currentUser.hapticsEnabled);
+  }, [currentUser.soundEffectsEnabled, currentUser.hapticsEnabled]);
 
   const blockedProfileIds = useMemo(() => blocks.map((block) => block.blockedId), [blocks]);
   const blockedProfiles = useMemo(
@@ -275,9 +362,56 @@ export default function App() {
       }
     } catch (error) {
       setNotice({ tone: "error", message: friendlyError(error) });
+      playErrorSound();
     } finally {
       setActionLoading(false);
     }
+  };
+
+  const createActivityNotification = async (input: {
+    userId: string;
+    actorId?: string | null;
+    postId?: string | null;
+    type: ActivityType;
+    title: string;
+    body?: string | null;
+    dedupeKey: string;
+  }) => {
+    try {
+      await requireSupabase().from("activity_notifications").upsert(
+        {
+          user_id: input.userId,
+          actor_id: input.actorId ?? null,
+          post_id: input.postId ?? null,
+          type: input.type,
+          title: input.title,
+          body: input.body ?? null,
+          dedupe_key: input.dedupeKey,
+        },
+        { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
+      );
+    } catch {
+      return;
+    }
+  };
+
+  const createRatingMilestoneNotification = async (post: PostWithMeta) => {
+    const { count, error } = await requireSupabase()
+      .from("ratings")
+      .select("id", { count: "exact", head: true })
+      .eq("post_id", post.id);
+
+    if (error || !count || ![5, 10, 25].includes(count)) return;
+
+    await createActivityNotification({
+      userId: post.authorId,
+      actorId: session?.user.id ?? null,
+      postId: post.id,
+      type: "post_milestone",
+      title: `Your ${post.category} post got ${count} ratings.`,
+      body: "The vibe is picking up.",
+      dedupeKey: `post_milestone:${post.id}:${count}`,
+    });
   };
 
   const handleLogin = async (email: string, password: string) => {
@@ -289,6 +423,7 @@ export default function App() {
 
       return { ok: true };
     } catch (error) {
+      playErrorSound();
       return { ok: false, message: friendlyError(error) };
     } finally {
       setActionLoading(false);
@@ -320,6 +455,7 @@ export default function App() {
 
       return { ok: true, needsOnboarding: true };
     } catch (error) {
+      playErrorSound();
       return { ok: false, message: friendlyError(error) };
     } finally {
       setActionLoading(false);
@@ -329,6 +465,14 @@ export default function App() {
   const handleSaveProfile = async (input: ProfileInput, avatarFile?: File | null) => {
     if (!session?.user.id) return false;
     let saved = false;
+    const nextUsername = normalizeUsername(input.username);
+    const usernameError = validateUsername(nextUsername);
+
+    if (usernameError) {
+      setNotice({ tone: "error", message: usernameError });
+      playErrorSound();
+      return false;
+    }
 
     await withAction(async () => {
       const avatarUrl = avatarFile
@@ -337,12 +481,14 @@ export default function App() {
       const { error } = await requireSupabase().from("profiles").upsert(
         {
           id: session.user.id,
-          username: input.username,
+          username: nextUsername,
           display_name: input.displayName.trim(),
           bio: input.bio.trim(),
           avatar_url: avatarUrl,
           vibe_color: input.vibeColor,
           public_score_enabled: input.publicScoreEnabled,
+          sound_effects_enabled: input.soundEffectsEnabled ?? profile?.soundEffectsEnabled ?? true,
+          haptics_enabled: input.hapticsEnabled ?? profile?.hapticsEnabled ?? true,
         },
         { onConflict: "id" },
       );
@@ -360,6 +506,7 @@ export default function App() {
 
     if (isRestrictedUser) {
       setNotice({ tone: "error", message: restrictedMessage });
+      playErrorSound();
       return null;
     }
 
@@ -386,7 +533,18 @@ export default function App() {
 
       if (error) throw error;
       createdPostId = data.id;
+      await createActivityNotification({
+        userId: session.user.id,
+        actorId: session.user.id,
+        postId: data.id,
+        type: "post_created",
+        title: "Your post is live.",
+        body: `${input.category} moment is ready for ratings.`,
+        dedupeKey: `post_created:${data.id}`,
+      });
       await refreshData(session.user.id);
+      playPostCreatedSound();
+      triggerHaptic(18);
     }, "Moment posted.");
 
     return createdPostId;
@@ -425,6 +583,7 @@ export default function App() {
 
     if (isRestrictedUser) {
       setNotice({ tone: "error", message: restrictedMessage });
+      playErrorSound();
       return;
     }
 
@@ -436,6 +595,7 @@ export default function App() {
 
     if (blockedProfileIds.includes(post.authorId)) {
       setNotice({ tone: "error", message: "This post is unavailable." });
+      playErrorSound();
       return;
     }
 
@@ -450,7 +610,19 @@ export default function App() {
       );
 
       if (error) throw error;
+      await createActivityNotification({
+        userId: post.authorId,
+        actorId: session.user.id,
+        postId,
+        type: "post_rated",
+        title: `${currentUser.displayName} rated your ${post.category} post.`,
+        body: "Your post got a new rating.",
+        dedupeKey: `post_rated:${postId}:${session.user.id}`,
+      });
+      await createRatingMilestoneNotification(post);
       await refreshData(session.user.id);
+      playRateSound();
+      triggerHaptic(10);
     });
   };
 
@@ -521,6 +693,7 @@ export default function App() {
 
     if (isRestrictedUser) {
       setNotice({ tone: "error", message: restrictedMessage });
+      playErrorSound();
       return;
     }
 
@@ -540,6 +713,18 @@ export default function App() {
           );
 
       if (result.error) throw result.error;
+      if (!isFollowing) {
+        await createActivityNotification({
+          userId: profileId,
+          actorId: session.user.id,
+          type: "user_followed",
+          title: `${currentUser.displayName} followed you.`,
+          body: "A new person is following your Vybz.",
+          dedupeKey: `user_followed:${session.user.id}`,
+        });
+        playFollowSound();
+        triggerHaptic(8);
+      }
       await refreshData(session.user.id);
     }, isFollowing ? "Unfollowed." : "Following.");
   };
@@ -557,11 +742,23 @@ export default function App() {
 
   const handlePostStatusChange = async (postId: string, status: PostStatus) => {
     if (!currentUser.isAdmin) return;
+    const post = posts.find((item) => item.id === postId);
 
     await withAction(async () => {
       const { error } = await requireSupabase().from("posts").update({ status }).eq("id", postId);
       if (error) throw error;
       await recordModerationAction(`post_${status}`, postId);
+      if (status === "removed" && post) {
+        await createActivityNotification({
+          userId: post.authorId,
+          actorId: currentUser.id,
+          postId,
+          type: "post_removed",
+          title: "Your post was removed.",
+          body: "A moderation action was applied.",
+          dedupeKey: `post_removed:${postId}`,
+        });
+      }
       await refreshData();
     }, "Post status updated.");
   };
@@ -579,13 +776,46 @@ export default function App() {
 
   const handleReportStatusChange = async (reportId: string, status: ReportStatus) => {
     if (!currentUser.isAdmin) return;
+    const report = reports.find((item) => item.id === reportId);
 
     await withAction(async () => {
       const { error } = await requireSupabase().from("reports").update({ status }).eq("id", reportId);
       if (error) throw error;
       await recordModerationAction(`report_${status}`);
+      if (report && (status === "resolved" || status === "dismissed")) {
+        await createActivityNotification({
+          userId: report.reporterId,
+          actorId: currentUser.id,
+          postId: report.reportedPostId,
+          type: status === "resolved" ? "report_resolved" : "report_reviewed",
+          title: status === "resolved" ? "Your report was resolved." : "Your report was reviewed.",
+          body: "Thanks for helping keep Vybz safe.",
+          dedupeKey: `report_${status}:${reportId}`,
+        });
+      }
       await refreshData();
     }, "Report updated.");
+  };
+
+  const handleActivityOpened = () => {
+    if (unreadActivityCount > 0) {
+      playActivitySound();
+    }
+  };
+
+  const handleMarkAllActivityRead = async () => {
+    if (!session?.user.id || unreadActivityCount === 0) return;
+
+    await withAction(async () => {
+      const { error } = await requireSupabase()
+        .from("activity_notifications")
+        .update({ read_at: new Date().toISOString() })
+        .eq("user_id", session.user.id)
+        .is("read_at", null);
+
+      if (error) throw error;
+      await refreshData(session.user.id);
+    }, "Activity marked read.");
   };
 
   const handleLogout = async () => {
@@ -593,6 +823,18 @@ export default function App() {
       const { error } = await requireSupabase().auth.signOut();
       if (error) throw error;
     });
+  };
+
+  const handleRetryLoad = () => {
+    setLoadError("");
+
+    if (session?.user.id) {
+      setProfileLoadedForUserId(null);
+      refreshData(session.user.id);
+      return;
+    }
+
+    window.location.reload();
   };
 
   const handleDeleteAccountRequest = async () => {
@@ -618,6 +860,9 @@ export default function App() {
     authReady,
     dataLoading,
     profileReady,
+    loadError,
+    onRetryLoad: handleRetryLoad,
+    unreadActivityCount,
     notice,
     onClearNotice: () => setNotice(null),
   };
@@ -644,6 +889,8 @@ export default function App() {
               authReady={authReady}
               dataLoading={dataLoading}
               profileReady={profileReady}
+              loadError={loadError}
+              onRetryLoad={handleRetryLoad}
             />
           }
         />
@@ -728,7 +975,18 @@ export default function App() {
           />
           <Route
             path="/stars"
-            element={<Stars currentUser={currentUser} posts={accessiblePosts} ratings={ratings} />}
+            element={
+              <Stars
+                currentUser={currentUser}
+                posts={accessiblePosts}
+                ratings={ratings}
+                activityNotifications={activityNotifications}
+                profiles={profiles}
+                unreadActivityCount={unreadActivityCount}
+                onActivityOpen={handleActivityOpened}
+                onMarkAllActivityRead={handleMarkAllActivityRead}
+              />
+            }
           />
           <Route
             path="/me"

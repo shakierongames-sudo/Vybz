@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { LogOut, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
-import { normalizeUsername, validateImage } from "../lib/supabaseData";
+import { getImageSizeHint, normalizeUsername, validateImage, validateUsername } from "../lib/supabaseData";
 import type { ProfileInput, VybzProfile } from "../lib/types";
 
 type SettingsProps = {
@@ -15,6 +15,15 @@ type SettingsProps = {
   onLogout: () => Promise<void>;
   onDeleteAccountRequest: () => Promise<void>;
 };
+
+function daysUntilUsernameChange(usernameUpdatedAt: string | null) {
+  if (!usernameUpdatedAt) return 0;
+
+  const nextChange = Date.parse(usernameUpdatedAt) + 30 * 24 * 60 * 60 * 1000;
+  const remaining = nextChange - Date.now();
+
+  return remaining > 0 ? Math.ceil(remaining / (24 * 60 * 60 * 1000)) : 0;
+}
 
 export function Settings({
   currentUser,
@@ -31,9 +40,14 @@ export function Settings({
   const [bio, setBio] = useState(currentUser.bio);
   const [vibeColor, setVibeColor] = useState(currentUser.vibeColor);
   const [publicScoreEnabled, setPublicScoreEnabled] = useState(currentUser.publicScoreEnabled);
+  const [soundEffectsEnabled, setSoundEffectsEnabled] = useState(currentUser.soundEffectsEnabled);
+  const [hapticsEnabled, setHapticsEnabled] = useState(currentUser.hapticsEnabled);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState(currentUser.avatarUrl);
   const [message, setMessage] = useState("");
+  const [imageHint, setImageHint] = useState("");
+  const usernameCooldownDays = daysUntilUsernameChange(currentUser.usernameUpdatedAt);
+  const usernameChanged = username !== currentUser.username;
 
   useEffect(() => {
     setUsername(currentUser.username);
@@ -41,6 +55,8 @@ export function Settings({
     setBio(currentUser.bio);
     setVibeColor(currentUser.vibeColor);
     setPublicScoreEnabled(currentUser.publicScoreEnabled);
+    setSoundEffectsEnabled(currentUser.soundEffectsEnabled);
+    setHapticsEnabled(currentUser.hapticsEnabled);
     setAvatarPreview(currentUser.avatarUrl);
   }, [currentUser]);
 
@@ -50,10 +66,12 @@ export function Settings({
     const validationError = validateImage(file);
     if (validationError) {
       setMessage(validationError);
+      setImageHint("");
       return;
     }
 
     setMessage("");
+    setImageHint(getImageSizeHint(file));
     setAvatarFile(file);
     setAvatarPreview(URL.createObjectURL(file));
   };
@@ -62,6 +80,17 @@ export function Settings({
     event.preventDefault();
     setMessage("");
 
+    const usernameError = validateUsername(username);
+    if (usernameError) {
+      setMessage(usernameError);
+      return;
+    }
+
+    if (usernameChanged && usernameCooldownDays > 0) {
+      setMessage(`Username can only be changed once every 30 days. Try again in ${usernameCooldownDays} days.`);
+      return;
+    }
+
     const saved = await onSaveProfile(
       {
         username,
@@ -69,6 +98,8 @@ export function Settings({
         bio,
         vibeColor,
         publicScoreEnabled,
+        soundEffectsEnabled,
+        hapticsEnabled,
       },
       avatarFile,
     );
@@ -92,6 +123,9 @@ export function Settings({
         <label className="field">
           <span>Username</span>
           <input value={username} onChange={(event) => setUsername(normalizeUsername(event.target.value))} />
+          {usernameChanged && usernameCooldownDays > 0 ? (
+            <small>Username changes unlock again in {usernameCooldownDays} days.</small>
+          ) : null}
         </label>
         <label className="field">
           <span>Display name</span>
@@ -109,6 +143,7 @@ export function Settings({
             onChange={(event) => handleAvatarChange(event.target.files?.[0])}
           />
         </label>
+        {imageHint ? <p className="muted-copy">{imageHint}</p> : null}
         <label className="field">
           <span>Vibe color</span>
           <input type="color" value={vibeColor} onChange={(event) => setVibeColor(event.target.value)} />
@@ -122,6 +157,28 @@ export function Settings({
             type="checkbox"
             checked={publicScoreEnabled}
             onChange={(event) => setPublicScoreEnabled(event.target.checked)}
+          />
+        </label>
+        <label className="toggle-row">
+          <span>
+            <strong>Sound effects</strong>
+            <small>Play short Vybz sounds for actions</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={soundEffectsEnabled}
+            onChange={(event) => setSoundEffectsEnabled(event.target.checked)}
+          />
+        </label>
+        <label className="toggle-row">
+          <span>
+            <strong>Haptics</strong>
+            <small>Use light vibration on supported phones</small>
+          </span>
+          <input
+            type="checkbox"
+            checked={hapticsEnabled}
+            onChange={(event) => setHapticsEnabled(event.target.checked)}
           />
         </label>
         {message ? <p className="form-message">{message}</p> : null}
