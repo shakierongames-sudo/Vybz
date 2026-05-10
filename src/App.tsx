@@ -281,7 +281,7 @@ export default function App() {
   };
 
   const handleLogin = async (email: string, password: string) => {
-    setActionLoading((true);
+    setActionLoading(true);
     try {
       const { data, error } = await requireSupabase().auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -296,7 +296,7 @@ export default function App() {
   };
 
   const handleSignUp = async (email: string, password: string, ageGate: AgeGateInput) => {
-    setActionLoading(((true);
+    setActionLoading(true);
     try {
       const { data, error } = await requireSupabase().auth.signUp({
         email,
