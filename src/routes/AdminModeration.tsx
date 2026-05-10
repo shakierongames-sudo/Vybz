@@ -70,6 +70,13 @@ export function AdminModeration({
                   <button
                     type="button"
                     className="ghost-button"
+                    onClick={() => onReportStatusChange(report.id, "resolved")}
+                  >
+                    Resolve
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
                     onClick={() => onReportStatusChange(report.id, "dismissed")}
                   >
                     Dismiss
@@ -109,7 +116,7 @@ export function AdminModeration({
           <article key={profile.id} className="moderation-row">
             <span>
               <strong>{profile.displayName}</strong>
-              <small>@{profile.username} · {profile.isAdmin ? "admin" : "user"}</small>
+              <small>@{profile.username} - {profile.isAdmin ? "admin" : "user"}</small>
             </span>
             <select
               value={profile.status}

@@ -143,7 +143,7 @@ export function Settings({
         {currentUser.isAdmin ? (
           <Link className="settings-row" to="/admin">
             <span>
-              <strong>Moderation</strong>
+              <strong>Admin / Moderation</strong>
               <small>Reports, posts, and users</small>
             </span>
             <ShieldCheck size={20} aria-hidden="true" />

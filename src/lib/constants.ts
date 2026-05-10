@@ -1,4 +1,23 @@
-export const categories = ["Daily", "Music", "Food", "Fit", "Night", "Study", "Travel"];
+export const categories = [
+  "Daily",
+  "Outfit",
+  "Food",
+  "Fitness",
+  "Gaming",
+  "Music",
+  "Travel",
+  "Study",
+  "Work",
+  "Pets",
+  "Art",
+  "Random",
+];
+
+export function normalizeCategory(value?: string | null) {
+  if (!value) return "Daily";
+  if (value === "Fit") return "Outfit";
+  return categories.includes(value) ? value : "Random";
+}
 
 export const moods = ["Glowy", "Charged", "Cozy", "Electric", "Focused", "Calm"];
 

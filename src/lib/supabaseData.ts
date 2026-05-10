@@ -1,4 +1,4 @@
-import { imageRules } from "./constants";
+import { imageRules, normalizeCategory } from "./constants";
 import { requireSupabase } from "./supabaseClient";
 import type {
   Block,
@@ -134,6 +134,20 @@ export async function uploadPublicImage(bucket: "avatars" | "post-images", userI
   }
 
   const client = requireSupabase();
+  const { data: profile, error: profileError } = await client
+    .from("profiles")
+    .select("status")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (profileError) {
+    throw profileError;
+  }
+
+  if (profile?.status && profile.status !== "active") {
+    throw new Error("Your account is restricted.");
+  }
+
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
   const path = `${userId}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
   const { error } = await client.storage.from(bucket).upload(path, file, {
@@ -173,7 +187,7 @@ function mapPost(row: PostRow): VybzPost {
     authorId: row.author_id,
     caption: row.caption ?? row.body ?? "",
     imageUrl: row.image_url ?? "",
-    category: row.category ?? "Daily",
+    category: normalizeCategory(row.category),
     mood: row.mood ?? "Glowy",
     visibility: row.visibility ?? "public",
     ratingEnabled: row.rating_enabled ?? true,

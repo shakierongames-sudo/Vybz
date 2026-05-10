@@ -643,6 +643,7 @@ on storage.objects for insert
 with check (
   bucket_id = 'avatars'
   and auth.uid()::text = (storage.foldername(name))[1]
+  and not public.is_restricted(auth.uid())
 );
 
 drop policy if exists avatars_owner_update on storage.objects;
@@ -651,10 +652,12 @@ on storage.objects for update
 using (
   bucket_id = 'avatars'
   and auth.uid()::text = (storage.foldername(name))[1]
+  and not public.is_restricted(auth.uid())
 )
 with check (
   bucket_id = 'avatars'
   and auth.uid()::text = (storage.foldername(name))[1]
+  and not public.is_restricted(auth.uid())
 );
 
 drop policy if exists avatars_owner_delete on storage.objects;
@@ -663,6 +666,7 @@ on storage.objects for delete
 using (
   bucket_id = 'avatars'
   and auth.uid()::text = (storage.foldername(name))[1]
+  and not public.is_restricted(auth.uid())
 );
 
 drop policy if exists post_images_public_read on storage.objects;
@@ -676,6 +680,7 @@ on storage.objects for insert
 with check (
   bucket_id = 'post-images'
   and auth.uid()::text = (storage.foldername(name))[1]
+  and not public.is_restricted(auth.uid())
 );
 
 drop policy if exists post_images_owner_update on storage.objects;
@@ -684,10 +689,12 @@ on storage.objects for update
 using (
   bucket_id = 'post-images'
   and auth.uid()::text = (storage.foldername(name))[1]
+  and not public.is_restricted(auth.uid())
 )
 with check (
   bucket_id = 'post-images'
   and auth.uid()::text = (storage.foldername(name))[1]
+  and not public.is_restricted(auth.uid())
 );
 
 drop policy if exists post_images_owner_delete on storage.objects;
@@ -696,6 +703,7 @@ on storage.objects for delete
 using (
   bucket_id = 'post-images'
   and auth.uid()::text = (storage.foldername(name))[1]
+  and not public.is_restricted(auth.uid())
 );
 
 grant usage on schema public to authenticated;

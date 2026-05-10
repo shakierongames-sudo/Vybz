@@ -79,6 +79,12 @@ export type ProfileInput = {
   publicScoreEnabled: boolean;
 };
 
+export type AgeGateInput = {
+  ageGatePassed: boolean;
+  ageGateCheckedAt: string;
+  termsAcceptedAt: string;
+};
+
 export type CreatePostInput = {
   imageFile: File;
   caption: string;

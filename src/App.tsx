@@ -13,6 +13,7 @@ import {
 } from "./lib/supabaseData";
 import type {
   AppNotice,
+  AgeGateInput,
   Block,
   CreatePostInput,
   Follow,
@@ -170,6 +171,8 @@ export default function App() {
 
   const currentUser = profile ?? createPlaceholderProfile(session);
   const profileReady = !session?.user.id || profileLoadedForUserId === session.user.id;
+  const isRestrictedUser = currentUser.status !== "active";
+  const restrictedMessage = "Your account is restricted.";
 
   const refreshData = async (userId = session?.user.id) => {
     if (!userId || !isSupabaseConfigured) return;
@@ -278,7 +281,7 @@ export default function App() {
   };
 
   const handleLogin = async (email: string, password: string) => {
-    setActionLoading(true);
+    setActionLoading((true);
     try {
       const { data, error } = await requireSupabase().auth.signInWithPassword({ email, password });
       if (error) throw error;
@@ -292,10 +295,20 @@ export default function App() {
     }
   };
 
-  const handleSignUp = async (email: string, password: string) => {
-    setActionLoading(true);
+  const handleSignUp = async (email: string, password: string, ageGate: AgeGateInput) => {
+    setActionLoading(((true);
     try {
-      const { data, error } = await requireSupabase().auth.signUp({ email, password });
+      const { data, error } = await requireSupabase().auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            age_gate_passed: ageGate.ageGatePassed,
+            age_gate_checked_at: ageGate.ageGateCheckedAt,
+            terms_accepted_at: ageGate.termsAcceptedAt,
+          },
+        },
+      });
       if (error) throw error;
 
       if (!data.session) {
@@ -344,6 +357,12 @@ export default function App() {
 
   const handleCreatePost = async (input: CreatePostInput) => {
     if (!session?.user.id) return null;
+
+    if (isRestrictedUser) {
+      setNotice({ tone: "error", message: restrictedMessage });
+      return null;
+    }
+
     let createdPostId: string | null = null;
 
     await withAction(async () => {
@@ -403,6 +422,12 @@ export default function App() {
 
   const handleRatePost = async (postId: string, value: number) => {
     if (!session?.user.id) return;
+
+    if (isRestrictedUser) {
+      setNotice({ tone: "error", message: restrictedMessage });
+      return;
+    }
+
     const post = posts.find((item) => item.id === postId);
 
     if (!post || post.authorId === session.user.id || !post.ratingEnabled) {
@@ -493,6 +518,11 @@ export default function App() {
 
   const handleFollowToggle = async (profileId: string, isFollowing: boolean) => {
     if (!session?.user.id || profileId === session.user.id) return;
+
+    if (isRestrictedUser) {
+      setNotice({ tone: "error", message: restrictedMessage });
+      return;
+    }
 
     await withAction(async () => {
       const result = isFollowing
@@ -752,15 +782,19 @@ export default function App() {
           <Route
             path="/admin"
             element={
-              <AdminModeration
-                currentUser={currentUser}
-                posts={accessiblePosts}
-                profiles={profiles}
-                reports={reports}
-                onPostStatusChange={handlePostStatusChange}
-                onUserStatusChange={handleUserStatusChange}
-                onReportStatusChange={handleReportStatusChange}
-              />
+              currentUser.isAdmin ? (
+                <AdminModeration
+                  currentUser={currentUser}
+                  posts={accessiblePosts}
+                  profiles={profiles}
+                  reports={reports}
+                  onPostStatusChange={handlePostStatusChange}
+                  onUserStatusChange={handleUserStatusChange}
+                  onReportStatusChange={handleReportStatusChange}
+                />
+              ) : (
+                <Navigate to="/feed" replace />
+              )
             }
           />
         </Route>
