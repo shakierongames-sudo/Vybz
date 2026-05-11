@@ -51,7 +51,7 @@ Both buckets allow public reads. Upload, update, and delete are restricted to fi
 - `avatars/<user-id>/avatar.webp`
 - `post-images/<user-id>/moment.webp`
 
-Accepted upload formats are JPG, JPEG, PNG, and WebP. The current frontend limit is 5MB.
+Accepted upload formats are JPG, JPEG, PNG, and WebP. The current frontend limit is 10MB.
 
 ## Admin Setup
 
