@@ -117,7 +117,7 @@
 .activity-toolbar,
 .activity-item {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -160,15 +160,18 @@
 
 .activity-item strong {
   overflow-wrap: anywhere;
+  line-height: 1.25;
 }
 
 .activity-item small {
   color: var(--muted);
+  line-height: 1.35;
 }
 
 .activity-dot {
   width: 10px;
   height: 10px;
+  margin-top: 6px;
   flex: 0 0 auto;
   border-radius: 999px;
   background: var(--cyan);
@@ -178,4 +181,147 @@
 .activity-item:not(.is-unread) .activity-dot {
   background: var(--line);
   box-shadow: none;
+}
+
+.profile-link span,
+.profile-preview > span,
+.profile-preview > div,
+.settings-row span,
+.rating-row span,
+.highlight-row span,
+.moderation-row span {
+  min-width: 0;
+}
+
+.profile-link strong,
+.settings-row strong,
+.rating-row strong,
+.highlight-row strong,
+.moderation-row strong,
+.profile-preview h2 {
+  overflow-wrap: anywhere;
+  line-height: 1.25;
+}
+
+.profile-link small,
+.profile-preview small,
+.profile-preview p {
+  overflow-wrap: anywhere;
+  line-height: 1.35;
+}
+
+.profile-preview {
+  min-width: 0;
+  align-items: flex-start;
+}
+
+.profile-preview > span,
+.profile-preview > div {
+  flex: 1;
+  display: grid;
+  gap: 4px;
+}
+
+.profile-preview p,
+.profile-preview small {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.post-card__vibe-row {
+  align-items: flex-start;
+}
+
+.post-card__vibe-row > .vibe-copy,
+.post-card__vibe-row > div:first-child {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.post-card__vibe-row strong {
+  color: var(--star);
+  font-size: 1rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.post-card__vibe-row span,
+.post-card__vibe-row small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
+.post-card__vibe-row small {
+  overflow-wrap: anywhere;
+}
+
+.profile-card__copy {
+  gap: 5px;
+  min-width: 0;
+}
+
+.profile-card__copy h2 {
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.profile-card__username,
+.profile-card__score {
+  font-weight: 800;
+}
+
+.profile-card__bio {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.4;
+}
+
+.profile-card__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.moderation-row > span {
+  flex: 1;
+}
+
+.moderation-row select {
+  flex: 0 0 132px;
+  width: 132px;
+}
+
+@media (max-width: 420px) {
+  .post-card__header,
+  .post-card__vibe-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .post-card__meta,
+  .star-rating {
+    width: 100%;
+    justify-content: flex-start;
+    justify-items: start;
+  }
+
+  .profile-card {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .profile-card__actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .star-rating__buttons {
+    max-width: 100%;
+  }
 }
