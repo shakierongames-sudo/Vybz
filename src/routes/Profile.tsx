@@ -80,10 +80,12 @@ export function Profile({
         <div className="profile-card__copy">
           <p className="eyebrow">{profile.isAdmin ? "admin" : profile.status}</p>
           <h2>{profile.displayName}</h2>
-          <p>@{profile.username}</p>
-          <p>{profile.bio}</p>
+          <p className="profile-card__username">@{profile.username}</p>
+          {profile.bio ? <p className="profile-card__bio">{profile.bio}</p> : null}
           {profile.publicScoreEnabled ? (
-            <p>{publicAverage ? `${publicAverage.toFixed(1)} public vibe` : "No public vibe yet"}</p>
+            <p className="profile-card__score">
+              {publicAverage ? `${publicAverage.toFixed(1)} public vibe` : "No public vibe yet"}
+            </p>
           ) : null}
         </div>
         <div className="profile-card__actions">
