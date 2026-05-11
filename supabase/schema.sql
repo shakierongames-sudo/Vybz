@@ -578,7 +578,11 @@ with check (auth.uid() = id or public.is_admin(auth.uid()));
 drop policy if exists posts_select_visible on public.posts;
 create policy posts_select_visible
 on public.posts for select
-using (public.can_view_post(id, auth.uid()));
+using (
+  auth.uid() = author_id
+  or status = 'active'
+  or public.is_admin(auth.uid())
+);
 
 drop policy if exists posts_insert_own on public.posts;
 create policy posts_insert_own
@@ -589,12 +593,12 @@ drop policy if exists posts_update_own_or_admin on public.posts;
 create policy posts_update_own_or_admin
 on public.posts for update
 using (
-  public.is_admin(auth.uid())
-  or (auth.uid() = author_id and not public.is_restricted(auth.uid()))
+  auth.uid() = author_id
+  or public.is_admin(auth.uid())
 )
 with check (
-  public.is_admin(auth.uid())
-  or (auth.uid() = author_id and not public.is_restricted(auth.uid()))
+  auth.uid() = author_id
+  or public.is_admin(auth.uid())
 );
 
 drop policy if exists posts_delete_own_or_admin on public.posts;
