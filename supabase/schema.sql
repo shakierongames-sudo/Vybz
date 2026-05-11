@@ -93,6 +93,7 @@ set username = 'user_' || replace(id::text, '-', '')
 where username is null or username = '';
 
 alter table public.profiles alter column username set not null;
+
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'profiles_username_format') then
@@ -107,6 +108,7 @@ begin
     alter table public.profiles add constraint profiles_bio_length check (char_length(bio) <= 240) not valid;
   end if;
 end $$;
+
 create unique index if not exists profiles_username_key on public.profiles (username);
 
 create table if not exists public.posts (
@@ -225,6 +227,7 @@ alter table public.reports add column if not exists details text not null defaul
 alter table public.reports add column if not exists status public.report_status not null default 'open';
 alter table public.reports add column if not exists created_at timestamptz not null default now();
 alter table public.reports alter column reported_post_id drop not null;
+
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'reports_reason_length') then
@@ -272,9 +275,11 @@ alter table public.activity_notifications add column if not exists body text;
 alter table public.activity_notifications add column if not exists dedupe_key text;
 alter table public.activity_notifications add column if not exists read_at timestamptz;
 alter table public.activity_notifications add column if not exists created_at timestamptz not null default now();
+
 update public.activity_notifications
 set dedupe_key = id::text
 where dedupe_key is null or dedupe_key = '';
+
 alter table public.activity_notifications alter column user_id set not null;
 alter table public.activity_notifications alter column type set not null;
 alter table public.activity_notifications alter column title set not null;
@@ -309,24 +314,16 @@ end;
 $$;
 
 drop trigger if exists profiles_set_updated_at on public.profiles;
-create trigger profiles_set_updated_at
-before update on public.profiles
-for each row execute function public.set_updated_at();
+create trigger profiles_set_updated_at before update on public.profiles for each row execute function public.set_updated_at();
 
 drop trigger if exists posts_set_updated_at on public.posts;
-create trigger posts_set_updated_at
-before update on public.posts
-for each row execute function public.set_updated_at();
+create trigger posts_set_updated_at before update on public.posts for each row execute function public.set_updated_at();
 
 drop trigger if exists ratings_set_updated_at on public.ratings;
-create trigger ratings_set_updated_at
-before update on public.ratings
-for each row execute function public.set_updated_at();
+create trigger ratings_set_updated_at before update on public.ratings for each row execute function public.set_updated_at();
 
 drop trigger if exists delete_account_requests_set_updated_at on public.delete_account_requests;
-create trigger delete_account_requests_set_updated_at
-before update on public.delete_account_requests
-for each row execute function public.set_updated_at();
+create trigger delete_account_requests_set_updated_at before update on public.delete_account_requests for each row execute function public.set_updated_at();
 
 create or replace function public.is_admin(check_user uuid)
 returns boolean
@@ -391,20 +388,9 @@ as $$
         or public.is_admin(viewer)
         or (
           p.status = 'active'
+          and p.visibility = 'public'
           and coalesce(author.status, 'active') = 'active'
           and (viewer is null or not public.has_block_between(viewer, p.author_id))
-          and (
-            p.visibility = 'public'
-            or (
-              viewer is not null
-              and exists (
-                select 1
-                from public.follows f
-                where f.follower_id = viewer
-                  and f.following_id = p.author_id
-              )
-            )
-          )
         )
       )
   );
@@ -444,69 +430,18 @@ stable
 security definer
 set search_path = public
 as $$
-  select public.is_admin(auth.uid())
-  or (
+  select
     auth.uid() is not null
-    and notification_actor = auth.uid()
-    and not public.is_restricted(auth.uid())
     and (
-      (
-        notification_type = 'post_created'
-        and notification_user = auth.uid()
-        and exists (
-          select 1
-          from public.posts p
-          where p.id = notification_post
-            and p.author_id = auth.uid()
-        )
-      )
+      public.is_admin(auth.uid())
       or (
-        notification_type = 'post_rated'
-        and notification_user <> auth.uid()
-        and exists (
-          select 1
-          from public.posts p
-          join public.ratings r on r.post_id = p.id
-          where p.id = notification_post
-            and p.author_id = notification_user
-            and r.user_id = auth.uid()
-            and p.author_id <> auth.uid()
+        not public.is_restricted(auth.uid())
+        and (
+          notification_actor = auth.uid()
+          or notification_user = auth.uid()
         )
       )
-      or (
-        notification_type = 'post_milestone'
-        and notification_user <> auth.uid()
-        and exists (
-          select 1
-          from public.posts p
-          where p.id = notification_post
-            and p.author_id = notification_user
-            and exists (
-              select 1
-              from public.ratings r
-              where r.post_id = p.id
-                and r.user_id = auth.uid()
-            )
-            and (
-              select count(*)
-              from public.ratings r2
-              where r2.post_id = p.id
-            ) in (5, 10, 25)
-        )
-      )
-      or (
-        notification_type = 'user_followed'
-        and notification_user <> auth.uid()
-        and notification_post is null
-        and exists (
-          select 1
-          from public.follows f
-          where f.follower_id = auth.uid()
-            and f.following_id = notification_user
-        )
-      )
-    )
-  );
+    );
 $$;
 
 create or replace function public.validate_profile_username()
@@ -537,9 +472,7 @@ end;
 $$;
 
 drop trigger if exists profiles_validate_username on public.profiles;
-create trigger profiles_validate_username
-before insert or update on public.profiles
-for each row execute function public.validate_profile_username();
+create trigger profiles_validate_username before insert or update on public.profiles for each row execute function public.validate_profile_username();
 
 create or replace function public.prevent_profile_privilege_change()
 returns trigger
@@ -558,9 +491,7 @@ end;
 $$;
 
 drop trigger if exists profiles_prevent_privilege_change on public.profiles;
-create trigger profiles_prevent_privilege_change
-before update on public.profiles
-for each row execute function public.prevent_profile_privilege_change();
+create trigger profiles_prevent_privilege_change before update on public.profiles for each row execute function public.prevent_profile_privilege_change();
 
 create or replace function public.prevent_post_status_change()
 returns trigger
@@ -578,9 +509,7 @@ end;
 $$;
 
 drop trigger if exists posts_prevent_status_change on public.posts;
-create trigger posts_prevent_status_change
-before update on public.posts
-for each row execute function public.prevent_post_status_change();
+create trigger posts_prevent_status_change before update on public.posts for each row execute function public.prevent_post_status_change();
 
 create or replace function public.prevent_activity_notification_change()
 returns trigger
@@ -605,9 +534,7 @@ end;
 $$;
 
 drop trigger if exists activity_notifications_prevent_change on public.activity_notifications;
-create trigger activity_notifications_prevent_change
-before update on public.activity_notifications
-for each row execute function public.prevent_activity_notification_change();
+create trigger activity_notifications_prevent_change before update on public.activity_notifications for each row execute function public.prevent_activity_notification_change();
 
 alter table public.profiles enable row level security;
 alter table public.posts enable row level security;

@@ -378,7 +378,7 @@ export default function App() {
     dedupeKey: string;
   }) => {
     try {
-      await requireSupabase().from("activity_notifications").upsert(
+      const { error } = await requireSupabase().from("activity_notifications").upsert(
         {
           user_id: input.userId,
           actor_id: input.actorId ?? null,
@@ -390,28 +390,37 @@ export default function App() {
         },
         { onConflict: "user_id,dedupe_key", ignoreDuplicates: true },
       );
-    } catch {
-      return;
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.warn("Activity notification failed", error);
+      return false;
     }
   };
 
   const createRatingMilestoneNotification = async (post: PostWithMeta) => {
-    const { count, error } = await requireSupabase()
-      .from("ratings")
-      .select("id", { count: "exact", head: true })
-      .eq("post_id", post.id);
+    try {
+      const { count, error } = await requireSupabase()
+        .from("ratings")
+        .select("id", { count: "exact", head: true })
+        .eq("post_id", post.id);
 
-    if (error || !count || ![5, 10, 25].includes(count)) return;
+      if (error) throw error;
+      if (!count || ![5, 10, 25].includes(count)) return;
 
-    await createActivityNotification({
-      userId: post.authorId,
-      actorId: session?.user.id ?? null,
-      postId: post.id,
-      type: "post_milestone",
-      title: `Your ${post.category} post got ${count} ratings.`,
-      body: "The vibe is picking up.",
-      dedupeKey: `post_milestone:${post.id}:${count}`,
-    });
+      await createActivityNotification({
+        userId: post.authorId,
+        actorId: session?.user.id ?? null,
+        postId: post.id,
+        type: "post_milestone",
+        title: `Your ${post.category} post got ${count} ratings.`,
+        body: "The vibe is picking up.",
+        dedupeKey: `post_milestone:${post.id}:${count}`,
+      });
+    } catch (error) {
+      console.warn("Activity notification failed", error);
+    }
   };
 
   const handleLogin = async (email: string, password: string) => {
@@ -513,7 +522,15 @@ export default function App() {
     let createdPostId: string | null = null;
 
     await withAction(async () => {
-      const imageUrl = await uploadPublicImage("post-images", session.user.id, input.imageFile);
+      let imageUrl = "";
+
+      try {
+        imageUrl = await uploadPublicImage("post-images", session.user.id, input.imageFile);
+      } catch (error) {
+        console.warn("Image upload failed", error);
+        throw new Error("Image upload failed");
+      }
+
       const { data, error } = await requireSupabase()
         .from("posts")
         .insert({
@@ -531,7 +548,11 @@ export default function App() {
         .select("id")
         .single();
 
-      if (error) throw error;
+      if (error || !data) {
+        console.warn("Post save failed", error);
+        throw new Error("Post save failed");
+      }
+
       createdPostId = data.id;
       await createActivityNotification({
         userId: session.user.id,
