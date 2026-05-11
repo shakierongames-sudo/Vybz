@@ -147,7 +147,7 @@ export function validateImage(file: File) {
   }
 
   if (file.size > imageRules.maxBytes) {
-    return "Images must be 5MB or smaller.";
+    return "Images must be 10MB or smaller.";
   }
 
   const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
@@ -161,10 +161,10 @@ export function validateImage(file: File) {
 
 export function getImageSizeHint(file: File) {
   if (file.size > imageRules.maxBytes * 0.8) {
-    return "Large image selected. It may take a moment to upload.";
+    return "Large image selected. Images must be 10MB or smaller.";
   }
 
-  return "";
+  return "JPG, PNG, or WebP. 10MB max.";
 }
 
 export async function uploadPublicImage(bucket: "avatars" | "post-images", userId: string, file: File) {
