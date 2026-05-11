@@ -749,8 +749,8 @@ with check (auth.uid() = user_id and status = 'open');
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values
-  ('avatars', 'avatars', true, 5242880, array['image/jpeg', 'image/jpg', 'image/png', 'image/webp']),
-  ('post-images', 'post-images', true, 5242880, array['image/jpeg', 'image/jpg', 'image/png', 'image/webp'])
+  ('avatars', 'avatars', true, 10485760, array['image/jpeg', 'image/jpg', 'image/png', 'image/webp']),
+  ('post-images', 'post-images', true, 10485760, array['image/jpeg', 'image/jpg', 'image/png', 'image/webp'])
 on conflict (id) do update
 set
   public = excluded.public,
