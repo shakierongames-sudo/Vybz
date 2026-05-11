@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Clock, MessageCircle, MoreHorizontal, Trash2 } from "lucide-react";
 import { Avatar } from "./Avatar";
@@ -24,9 +25,22 @@ function formatMoment(dateValue: string) {
 }
 
 export function PostCard({ post, currentUser, onRate, onDelete, onReportClick }: PostCardProps) {
+  const [visibleMyRating, setVisibleMyRating] = useState(post.myRating);
   const isOwnPost = post.authorId === currentUser.id;
   const canRate = !isOwnPost && currentUser.status === "active" && post.ratingEnabled;
   const statusLabel = post.status.replace("_", " ");
+  const averageLabel = post.averageRating ? post.averageRating.toFixed(1) : "New";
+  const ratingPrompt = visibleMyRating
+    ? `You rated: ${visibleMyRating} \u2605`
+    : canRate
+      ? "Tap a star to rate the vibe."
+      : isOwnPost
+        ? "Ratings from others appear here."
+        : "Sign in to rate the vibe.";
+
+  useEffect(() => {
+    setVisibleMyRating(post.myRating);
+  }, [post.id, post.myRating]);
 
   return (
     <article className="post-card">
@@ -50,14 +64,22 @@ export function PostCard({ post, currentUser, onRate, onDelete, onReportClick }:
       </Link>
 
       <div className="post-card__vibe-row">
-        <div>
-          <strong>{post.averageRating ? post.averageRating.toFixed(1) : "New"}</strong>
+        <div className="vibe-copy">
+          <strong>Average vibe: {averageLabel}{post.averageRating ? " \u2605" : ""}</strong>
           <span>{post.ratingCount === 1 ? "1 vibe" : `${post.ratingCount} vibes`}</span>
+          {post.ratingEnabled ? <small>{ratingPrompt}</small> : null}
         </div>
         {post.ratingEnabled ? (
           <StarRating
-            value={post.myRating ?? Math.round(post.averageRating)}
-            onChange={canRate ? (value) => onRate(post.id, value) : undefined}
+            value={visibleMyRating ?? Math.round(post.averageRating)}
+            onChange={
+              canRate
+                ? (value) => {
+                    setVisibleMyRating(value);
+                    onRate(post.id, value);
+                  }
+                : undefined
+            }
             readOnly={!canRate}
             compact
           />
