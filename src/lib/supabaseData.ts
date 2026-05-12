@@ -4,6 +4,8 @@ import type {
   ActivityNotification,
   ActivityType,
   Block,
+  DeleteAccountRequest,
+  DeleteRequestStatus,
   Follow,
   PostWithMeta,
   Rating,
@@ -72,6 +74,14 @@ type FollowRow = {
   created_at: string;
 };
 
+type DeleteAccountRequestRow = {
+  id: string;
+  user_id: string;
+  status: DeleteRequestStatus;
+  created_at: string;
+  updated_at: string;
+};
+
 type BlockRow = {
   blocker_id: string;
   blocked_id: string;
@@ -98,6 +108,7 @@ export type AppData = {
   follows: Follow[];
   blocks: Block[];
   reports: Report[];
+  deleteAccountRequests: DeleteAccountRequest[];
   activityNotifications: ActivityNotification[];
 };
 
@@ -117,6 +128,10 @@ export function friendlyError(error: unknown) {
     error && typeof error === "object" && "message" in error
       ? String((error as { message: unknown }).message)
       : String(error);
+
+  if (message.includes("delete_account_requests_user_id_key")) {
+    return "You already have an open deletion request.";
+  }
 
   if (message.includes("profiles_username_key") || message.toLowerCase().includes("duplicate")) {
     return "That username is already taken.";
@@ -274,6 +289,16 @@ function mapFollow(row: FollowRow): Follow {
   };
 }
 
+function mapDeleteAccountRequest(row: DeleteAccountRequestRow): DeleteAccountRequest {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    status: row.status,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function mapBlock(row: BlockRow): Block {
   return {
     blockerId: row.blocker_id,
@@ -350,6 +375,7 @@ export async function loadAppData(userId: string): Promise<AppData> {
       follows: [],
       blocks: [],
       reports: [],
+      deleteAccountRequests: [],
       activityNotifications: [],
     };
   }
@@ -405,10 +431,28 @@ export async function loadAppData(userId: string): Promise<AppData> {
 
   if (reportsResult.error) throw reportsResult.error;
 
+  const deleteAccountRequestsResult = profile.isAdmin
+    ? await client
+        .from("delete_account_requests")
+        .select("id,user_id,status,created_at,updated_at")
+        .eq("status", "open")
+        .order("created_at", { ascending: false })
+    : await client
+        .from("delete_account_requests")
+        .select("id,user_id,status,created_at,updated_at")
+        .eq("user_id", userId)
+        .eq("status", "open")
+        .order("created_at", { ascending: false });
+
+  if (deleteAccountRequestsResult.error) throw deleteAccountRequestsResult.error;
+
   const ratings = ((ratingsResult.data ?? []) as RatingRow[]).map(mapRating);
   const follows = ((followsResult.data ?? []) as FollowRow[]).map(mapFollow);
   const blocks = ((blocksResult.data ?? []) as BlockRow[]).map(mapBlock);
   const reports = ((reportsResult.data ?? []) as ReportRow[]).map(mapReport);
+  const deleteAccountRequests = ((deleteAccountRequestsResult.data ?? []) as DeleteAccountRequestRow[]).map(
+    mapDeleteAccountRequest,
+  );
   const profileMap = new Map(profiles.map((item) => [item.id, item]));
   profileMap.set(profile.id, profile);
 
@@ -438,6 +482,7 @@ export async function loadAppData(userId: string): Promise<AppData> {
     follows,
     blocks,
     reports,
+    deleteAccountRequests,
     activityNotifications,
   };
 }
