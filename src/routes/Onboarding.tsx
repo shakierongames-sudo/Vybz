@@ -8,21 +8,49 @@ import type { ProfileInput, VybzProfile } from "../lib/types";
 type OnboardingProps = {
   currentUser: VybzProfile;
   loading: boolean;
+  requiresAgeConfirmation: boolean;
   onSave: (input: ProfileInput, avatarFile?: File | null) => Promise<boolean>;
 };
 
 const colorOptions = ["#39FF88", "#25D9FF", "#FFE84A", "#F43F5E"];
 
-export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
+function getAge(dateValue: string) {
+  const birthDate = new Date(`${dateValue}T00:00:00`);
+
+  if (Number.isNaN(birthDate.getTime())) {
+    return 0;
+  }
+
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDelta = today.getMonth() - birthDate.getMonth();
+
+  if (monthDelta < 0 || (monthDelta === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+}
+
+export function Onboarding({ currentUser, loading, requiresAgeConfirmation, onSave }: OnboardingProps) {
   const [displayName, setDisplayName] = useState(currentUser.displayName);
   const [username, setUsername] = useState(currentUser.username);
   const [bio, setBio] = useState(currentUser.bio);
   const [vibeColor, setVibeColor] = useState(currentUser.vibeColor);
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState(currentUser.avatarUrl);
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [ageConfirmed, setAgeConfirmed] = useState(false);
   const [message, setMessage] = useState("");
   const [imageHint, setImageHint] = useState("");
   const navigate = useNavigate();
+  const age = dateOfBirth ? getAge(dateOfBirth) : 0;
+  const isAgeAllowed = Boolean(dateOfBirth) && age >= 13;
+  const ageGateMessage =
+    requiresAgeConfirmation && dateOfBirth && !isAgeAllowed
+      ? "Sorry, you must be at least 13 years old to use Vybz."
+      : "";
+  const canSave = !loading && (!requiresAgeConfirmation || (Boolean(dateOfBirth) && isAgeAllowed && ageConfirmed));
 
   useEffect(() => {
     setDisplayName(currentUser.displayName);
@@ -58,6 +86,18 @@ export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
       return;
     }
 
+    if (requiresAgeConfirmation && !isAgeAllowed) {
+      setMessage("Sorry, you must be at least 13 years old to use Vybz.");
+      return;
+    }
+
+    if (requiresAgeConfirmation && !ageConfirmed) {
+      setMessage("Confirm you are at least 13 and agree to the Community Guidelines.");
+      return;
+    }
+
+    const checkedAt = new Date().toISOString();
+
     const saved = await onSave(
       {
         username,
@@ -67,6 +107,13 @@ export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
         publicScoreEnabled: currentUser.publicScoreEnabled,
         soundEffectsEnabled: currentUser.soundEffectsEnabled,
         hapticsEnabled: currentUser.hapticsEnabled,
+        ageGate: requiresAgeConfirmation
+          ? {
+              ageGatePassed: true,
+              ageGateCheckedAt: checkedAt,
+              termsAcceptedAt: checkedAt,
+            }
+          : undefined,
       },
       avatarFile,
     );
@@ -114,6 +161,30 @@ export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
           <span>Bio</span>
           <textarea rows={4} value={bio} onChange={(event) => setBio(event.target.value)} />
         </label>
+        {requiresAgeConfirmation ? (
+          <>
+            <label className="field">
+              <span>Date of birth</span>
+              <input
+                type="date"
+                value={dateOfBirth}
+                onChange={(event) => setDateOfBirth(event.target.value)}
+                required
+              />
+            </label>
+            <label className="toggle-row">
+              <span>
+                <strong>13+ confirmation</strong>
+                <small>I confirm I am at least 13 years old and agree to the Community Guidelines.</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={ageConfirmed}
+                onChange={(event) => setAgeConfirmed(event.target.checked)}
+              />
+            </label>
+          </>
+        ) : null}
         <label className="field">
           <span>Avatar</span>
           <input
@@ -138,8 +209,8 @@ export function Onboarding({ currentUser, loading, onSave }: OnboardingProps) {
             ))}
           </div>
         </fieldset>
-        {message ? <p className="form-message">{message}</p> : null}
-        <button className="primary-button" type="submit" disabled={loading}>
+        {message || ageGateMessage ? <p className="form-message">{message || ageGateMessage}</p> : null}
+        <button className="primary-button" type="submit" disabled={!canSave}>
           <CheckCircle2 size={18} aria-hidden="true" />
           {loading ? "Saving..." : "Save profile"}
         </button>
