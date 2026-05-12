@@ -2,13 +2,14 @@ import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
-import { getImageSizeHint, normalizeUsername, validateImage, validateUsername } from "../lib/supabaseData";
+import { requireSupabase } from "../lib/supabaseClient";
+import { friendlyError, getImageSizeHint, normalizeUsername, validateImage, validateUsername } from "../lib/supabaseData";
 import type { ProfileInput, VybzProfile } from "../lib/types";
 
 type OnboardingProps = {
   currentUser: VybzProfile;
   loading: boolean;
-  requiresAgeConfirmation: boolean;
+  requiresAgeConfirmation?: boolean;
   onSave: (input: ProfileInput, avatarFile?: File | null) => Promise<boolean>;
 };
 
@@ -41,16 +42,19 @@ export function Onboarding({ currentUser, loading, requiresAgeConfirmation, onSa
   const [avatarPreview, setAvatarPreview] = useState(currentUser.avatarUrl);
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [ageConfirmed, setAgeConfirmed] = useState(false);
+  const [authRequiresAgeConfirmation, setAuthRequiresAgeConfirmation] = useState(false);
   const [message, setMessage] = useState("");
   const [imageHint, setImageHint] = useState("");
   const navigate = useNavigate();
+  const effectiveRequiresAgeConfirmation = requiresAgeConfirmation ?? authRequiresAgeConfirmation;
   const age = dateOfBirth ? getAge(dateOfBirth) : 0;
   const isAgeAllowed = Boolean(dateOfBirth) && age >= 13;
   const ageGateMessage =
-    requiresAgeConfirmation && dateOfBirth && !isAgeAllowed
+    effectiveRequiresAgeConfirmation && dateOfBirth && !isAgeAllowed
       ? "Sorry, you must be at least 13 years old to use Vybz."
       : "";
-  const canSave = !loading && (!requiresAgeConfirmation || (Boolean(dateOfBirth) && isAgeAllowed && ageConfirmed));
+  const canSave =
+    !loading && (!effectiveRequiresAgeConfirmation || (Boolean(dateOfBirth) && isAgeAllowed && ageConfirmed));
 
   useEffect(() => {
     setDisplayName(currentUser.displayName);
@@ -59,6 +63,25 @@ export function Onboarding({ currentUser, loading, requiresAgeConfirmation, onSa
     setVibeColor(currentUser.vibeColor);
     setAvatarPreview(currentUser.avatarUrl);
   }, [currentUser]);
+
+  useEffect(() => {
+    if (typeof requiresAgeConfirmation === "boolean") return;
+
+    let active = true;
+    requireSupabase()
+      .auth.getUser()
+      .then(({ data }) => {
+        if (!active) return;
+        setAuthRequiresAgeConfirmation(data.user?.user_metadata?.age_gate_passed !== true);
+      })
+      .catch(() => {
+        if (active) setAuthRequiresAgeConfirmation(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [requiresAgeConfirmation]);
 
   const handleAvatarChange = (file: File | undefined) => {
     if (!file) return;
@@ -86,17 +109,39 @@ export function Onboarding({ currentUser, loading, requiresAgeConfirmation, onSa
       return;
     }
 
-    if (requiresAgeConfirmation && !isAgeAllowed) {
+    if (effectiveRequiresAgeConfirmation && !isAgeAllowed) {
       setMessage("Sorry, you must be at least 13 years old to use Vybz.");
       return;
     }
 
-    if (requiresAgeConfirmation && !ageConfirmed) {
+    if (effectiveRequiresAgeConfirmation && !ageConfirmed) {
       setMessage("Confirm you are at least 13 and agree to the Community Guidelines.");
       return;
     }
 
     const checkedAt = new Date().toISOString();
+    const ageGate = effectiveRequiresAgeConfirmation
+      ? {
+          ageGatePassed: true,
+          ageGateCheckedAt: checkedAt,
+          termsAcceptedAt: checkedAt,
+        }
+      : undefined;
+
+    if (ageGate) {
+      const { error } = await requireSupabase().auth.updateUser({
+        data: {
+          age_gate_passed: ageGate.ageGatePassed,
+          age_gate_checked_at: ageGate.ageGateCheckedAt,
+          terms_accepted_at: ageGate.termsAcceptedAt,
+        },
+      });
+
+      if (error) {
+        setMessage(friendlyError(error));
+        return;
+      }
+    }
 
     const saved = await onSave(
       {
@@ -107,13 +152,7 @@ export function Onboarding({ currentUser, loading, requiresAgeConfirmation, onSa
         publicScoreEnabled: currentUser.publicScoreEnabled,
         soundEffectsEnabled: currentUser.soundEffectsEnabled,
         hapticsEnabled: currentUser.hapticsEnabled,
-        ageGate: requiresAgeConfirmation
-          ? {
-              ageGatePassed: true,
-              ageGateCheckedAt: checkedAt,
-              termsAcceptedAt: checkedAt,
-            }
-          : undefined,
+        ageGate,
       },
       avatarFile,
     );
@@ -161,7 +200,7 @@ export function Onboarding({ currentUser, loading, requiresAgeConfirmation, onSa
           <span>Bio</span>
           <textarea rows={4} value={bio} onChange={(event) => setBio(event.target.value)} />
         </label>
-        {requiresAgeConfirmation ? (
+        {effectiveRequiresAgeConfirmation ? (
           <>
             <label className="field">
               <span>Date of birth</span>
