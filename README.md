@@ -37,7 +37,22 @@ In Supabase, enable Email auth under Authentication. Email/password sign up and 
 
 If email confirmations are enabled, new users must confirm their email before onboarding. If confirmations are disabled, sign up sends the user directly to profile creation.
 
-Google sign-in is shown as coming soon and is disabled until OAuth is configured.
+Google sign-in uses Supabase OAuth once the Google provider is configured.
+
+Google OAuth setup:
+
+1. Create a Google OAuth client in Google Cloud Console.
+2. Add this authorised JavaScript origin:
+   - `https://vybz-app.netlify.app`
+3. In Supabase, open Authentication > Providers > Google and copy the callback URL shown there.
+4. Add that Supabase callback URL to the Google OAuth client's authorised redirect URIs.
+5. Paste the Google Client ID and Client Secret into the Supabase Google provider settings and enable the provider.
+6. In Supabase Authentication > URL Configuration, set the site URL to `https://vybz-app.netlify.app`.
+7. Add redirect URLs for:
+   - `https://vybz-app.netlify.app/login`
+   - `http://localhost:5173/login`
+
+Google users still complete onboarding before they can use the app. If their auth metadata does not already show the age gate was completed, onboarding asks for the 13+ confirmation and stores only `age_gate_passed`, `age_gate_checked_at`, and `terms_accepted_at` in auth metadata.
 
 ## Storage Setup
 
