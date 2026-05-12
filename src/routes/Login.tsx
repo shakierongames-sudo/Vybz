@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
-import { LogIn, UserPlus } from "lucide-react";
+import { Chrome, LogIn, UserPlus } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { LoadingState } from "../components/LoadingState";
 import { requireSupabase } from "../lib/supabaseClient";
@@ -19,6 +19,7 @@ type LoginProps = {
   loading: boolean;
   onLogin: (email: string, password: string) => Promise<AuthResult>;
   onSignUp: (email: string, password: string, ageGate: AgeGateInput) => Promise<AuthResult>;
+  onGoogleSignIn: () => Promise<AuthResult>;
 };
 
 function getAge(dateValue: string) {
@@ -39,7 +40,7 @@ function getAge(dateValue: string) {
   return age;
 }
 
-export function Login({ session, hasProfile, loading, onLogin, onSignUp }: LoginProps) {
+export function Login({ session, hasProfile, loading, onLogin, onSignUp, onGoogleSignIn }: LoginProps) {
   const [searchParams] = useSearchParams();
   const requestedMode = searchParams.get("mode") === "signup" ? "signup" : "login";
   const [mode, setMode] = useState<"login" | "signup">(requestedMode);
@@ -154,6 +155,15 @@ export function Login({ session, hasProfile, loading, onLogin, onSignUp }: Login
     navigate("/feed");
   };
 
+  const handleGoogleSignIn = async () => {
+    setMessage("");
+    const result = await onGoogleSignIn();
+
+    if (!result.ok) {
+      setMessage(result.message ?? "Google sign-in could not start.");
+    }
+  };
+
   return (
     <main className="auth-screen">
       <section className="auth-card">
@@ -215,8 +225,9 @@ export function Login({ session, hasProfile, loading, onLogin, onSignUp }: Login
             {mode === "login" ? <LogIn size={18} aria-hidden="true" /> : <UserPlus size={18} aria-hidden="true" />}
             {loading ? "Working..." : mode === "login" ? "Log in" : "Sign up"}
           </button>
-          <button className="secondary-button" type="button" disabled>
-            Google sign-in coming soon
+          <button className="secondary-button" type="button" onClick={handleGoogleSignIn} disabled={loading}>
+            <Chrome size={18} aria-hidden="true" />
+            Continue with Google
           </button>
           <button
             className="text-button"
