@@ -36,6 +36,7 @@ import type {
   Rating,
   Report,
   ReportStatus,
+  SaveProfileResult,
   UpdatePostInput,
   UserStatus,
   VybzProfile,
@@ -55,13 +56,21 @@ import { Welcome } from "./routes/Welcome";
 function createPlaceholderProfile(session: Session | null): VybzProfile {
   const now = new Date().toISOString();
   const emailName = session?.user.email?.split("@")[0] ?? "";
+  const metadata = session?.user.user_metadata ?? {};
+  const metadataName =
+    typeof metadata.full_name === "string"
+      ? metadata.full_name
+      : typeof metadata.name === "string"
+        ? metadata.name
+        : "";
+  const metadataAvatar = typeof metadata.avatar_url === "string" ? metadata.avatar_url : null;
 
   return {
     id: session?.user.id ?? "",
     username: normalizeUsername(emailName) || "new_vyber",
-    displayName: emailName || "New Vyber",
+    displayName: metadataName || emailName || "New Vyber",
     bio: "",
-    avatarUrl: null,
+    avatarUrl: metadataAvatar,
     vibeColor: "#39FF88",
     status: "active",
     isAdmin: false,
@@ -72,6 +81,24 @@ function createPlaceholderProfile(session: Session | null): VybzProfile {
     createdAt: now,
     updatedAt: now,
   };
+}
+
+function getProfileSaveError(error: unknown) {
+  const message = friendlyError(error);
+  const lowerMessage = message.toLowerCase();
+
+  if (
+    message === "That username is already taken." ||
+    message === "Add a display name." ||
+    message === "Avatar upload failed." ||
+    message.startsWith("Username can only be changed") ||
+    message.startsWith("Use a username") ||
+    lowerMessage.includes("community guidelines")
+  ) {
+    return message;
+  }
+
+  return "Profile save failed.";
 }
 
 type LayoutGuardProps = {
@@ -235,6 +262,8 @@ export default function App() {
 
   const currentUser = profile ?? createPlaceholderProfile(session);
   const profileReady = !session?.user.id || profileLoadedForUserId === session.user.id;
+  const ageGatePassed = session?.user.user_metadata?.age_gate_passed === true;
+  const requiresAgeConfirmation = Boolean(session?.user.id && !profile && !ageGatePassed);
   const isRestrictedUser = currentUser.status !== "active";
   const restrictedMessage = "Your account is restricted.";
   const unreadActivityCount = activityNotifications.filter((item) => !item.readAt).length;
@@ -471,43 +500,125 @@ export default function App() {
     }
   };
 
-  const handleSaveProfile = async (input: ProfileInput, avatarFile?: File | null) => {
-    if (!session?.user.id) return false;
-    let saved = false;
+  const handleGoogleSignIn = async () => {
+    setActionLoading(true);
+    try {
+      const { error } = await requireSupabase().auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/login`,
+        },
+      });
+
+      if (error) throw error;
+
+      return { ok: true };
+    } catch (error) {
+      playErrorSound();
+      return { ok: false, message: friendlyError(error) };
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleSaveProfile = async (
+    input: ProfileInput,
+    avatarFile?: File | null,
+  ): Promise<SaveProfileResult> => {
+    if (!session?.user.id) return { ok: false, message: "Profile save failed." };
     const nextUsername = normalizeUsername(input.username);
     const usernameError = validateUsername(nextUsername);
+    const nextDisplayName = input.displayName.trim();
 
     if (usernameError) {
       setNotice({ tone: "error", message: usernameError });
       playErrorSound();
-      return false;
+      return { ok: false, message: usernameError };
     }
 
-    await withAction(async () => {
-      const avatarUrl = avatarFile
-        ? await uploadPublicImage("avatars", session.user.id, avatarFile)
-        : profile?.avatarUrl ?? null;
-      const { error } = await requireSupabase().from("profiles").upsert(
-        {
-          id: session.user.id,
-          username: nextUsername,
-          display_name: input.displayName.trim(),
-          bio: input.bio.trim(),
-          avatar_url: avatarUrl,
-          vibe_color: input.vibeColor,
-          public_score_enabled: input.publicScoreEnabled,
-          sound_effects_enabled: input.soundEffectsEnabled ?? profile?.soundEffectsEnabled ?? true,
-          haptics_enabled: input.hapticsEnabled ?? profile?.hapticsEnabled ?? true,
-        },
-        { onConflict: "id" },
-      );
+    if (!nextDisplayName) {
+      setNotice({ tone: "error", message: "Add a display name." });
+      playErrorSound();
+      return { ok: false, message: "Add a display name." };
+    }
 
-      if (error) throw error;
+    setActionLoading(true);
+    setNotice(null);
+
+    try {
+      if (requiresAgeConfirmation && !input.ageGate?.ageGatePassed) {
+        throw new Error("Confirm you are at least 13 and agree to the Community Guidelines.");
+      }
+
+      const client = requireSupabase();
+
+      if (input.ageGate) {
+        const { error: ageGateError } = await client.auth.updateUser({
+          data: {
+            age_gate_passed: input.ageGate.ageGatePassed,
+            age_gate_checked_at: input.ageGate.ageGateCheckedAt,
+            terms_accepted_at: input.ageGate.termsAcceptedAt,
+          },
+        });
+
+        if (ageGateError) throw ageGateError;
+      }
+
+      const { data: existingProfile, error: profileLookupError } = await client
+        .from("profiles")
+        .select("id,avatar_url")
+        .eq("id", session.user.id)
+        .maybeSingle();
+
+      if (profileLookupError) throw profileLookupError;
+
+      let avatarUrl = existingProfile?.avatar_url ?? profile?.avatarUrl ?? currentUser.avatarUrl ?? null;
+
+      if (avatarFile) {
+        try {
+          avatarUrl = await uploadPublicImage("avatars", session.user.id, avatarFile);
+        } catch (error) {
+          console.warn("Avatar upload failed", error);
+          throw new Error("Avatar upload failed.");
+        }
+      }
+
+      const profilePayload = {
+        username: nextUsername,
+        display_name: nextDisplayName,
+        bio: input.bio.trim(),
+        avatar_url: avatarUrl,
+        vibe_color: input.vibeColor,
+        public_score_enabled: input.publicScoreEnabled,
+        sound_effects_enabled: input.soundEffectsEnabled ?? profile?.soundEffectsEnabled ?? true,
+        haptics_enabled: input.hapticsEnabled ?? profile?.hapticsEnabled ?? true,
+      };
+
+      const result = existingProfile
+        ? await client.from("profiles").update(profilePayload).eq("id", session.user.id)
+        : await client.from("profiles").insert({
+            id: session.user.id,
+            ...profilePayload,
+            status: "active",
+            is_admin: false,
+            public_score_enabled: true,
+            sound_effects_enabled: true,
+            haptics_enabled: true,
+          });
+
+      if (result.error) throw result.error;
+
       await refreshData(session.user.id);
-      saved = true;
-    }, "Profile saved.");
-
-    return saved;
+      setNotice({ tone: "success", message: "Profile saved." });
+      return { ok: true };
+    } catch (error) {
+      const message = getProfileSaveError(error);
+      setNotice({ tone: "error", message });
+      playErrorSound();
+      return { ok: false, message };
+    } finally {
+      setActionLoading(false);
+    }
   };
 
   const handleCreatePost = async (input: CreatePostInput) => {
@@ -924,6 +1035,7 @@ export default function App() {
               loading={actionLoading}
               onLogin={handleLogin}
               onSignUp={handleSignUp}
+              onGoogleSignIn={handleGoogleSignIn}
             />
           }
         />
@@ -939,6 +1051,7 @@ export default function App() {
                 <Onboarding
                   currentUser={currentUser}
                   loading={actionLoading}
+                  requiresAgeConfirmation={requiresAgeConfirmation}
                   onSave={handleSaveProfile}
                 />
               )
