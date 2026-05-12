@@ -1,14 +1,25 @@
 import { EmptyState } from "../components/EmptyState";
-import type { PostStatus, PostWithMeta, Report, ReportStatus, UserStatus, VybzProfile } from "../lib/types";
+import type {
+  DeleteAccountRequest,
+  DeleteRequestStatus,
+  PostStatus,
+  PostWithMeta,
+  Report,
+  ReportStatus,
+  UserStatus,
+  VybzProfile,
+} from "../lib/types";
 
 type AdminModerationProps = {
   currentUser: VybzProfile;
   posts: PostWithMeta[];
   profiles: VybzProfile[];
   reports: Report[];
+  deleteAccountRequests: DeleteAccountRequest[];
   onPostStatusChange: (postId: string, status: PostStatus) => Promise<void>;
   onUserStatusChange: (profileId: string, status: UserStatus) => Promise<void>;
   onReportStatusChange: (reportId: string, status: ReportStatus) => Promise<void>;
+  onDeleteAccountRequestStatusChange: (requestId: string, status: DeleteRequestStatus) => Promise<void>;
 };
 
 const userStatuses: UserStatus[] = ["active", "suspended", "banned"];
@@ -18,9 +29,11 @@ export function AdminModeration({
   posts,
   profiles,
   reports,
+  deleteAccountRequests,
   onPostStatusChange,
   onUserStatusChange,
   onReportStatusChange,
+  onDeleteAccountRequestStatusChange,
 }: AdminModerationProps) {
   if (!currentUser.isAdmin) {
     return <EmptyState title="Admin only" body="Moderation tools are available to admin accounts." />;
@@ -36,6 +49,10 @@ export function AdminModeration({
         <div className="stat-tile">
           <span>{posts.filter((post) => post.status !== "active").length}</span>
           <small>flagged posts</small>
+        </div>
+        <div className="stat-tile">
+          <span>{deleteAccountRequests.length}</span>
+          <small>deletion requests</small>
         </div>
       </div>
 
@@ -87,6 +104,46 @@ export function AdminModeration({
           })
         ) : (
           <p className="muted-copy">No reports open. Everything looks calm.</p>
+        )}
+      </section>
+
+      <section className="moderation-section">
+        <h2>Account deletion requests</h2>
+        <p className="muted-copy">Account deletion is currently handled manually by admin.</p>
+        {deleteAccountRequests.length ? (
+          deleteAccountRequests.map((request) => {
+            const requestedProfile = profiles.find((profile) => profile.id === request.userId);
+            const createdAt = new Date(request.createdAt).toLocaleString();
+
+            return (
+              <article key={request.id} className="moderation-row moderation-row--stacked">
+                <span>
+                  <strong>{requestedProfile?.displayName ?? "Unknown user"}</strong>
+                  <small>@{requestedProfile?.username ?? "unknown"} - {request.userId}</small>
+                  <small>Status: {request.status}</small>
+                  <small>Requested: {createdAt}</small>
+                </span>
+                <div className="post-card__actions">
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => onDeleteAccountRequestStatusChange(request.id, "completed")}
+                  >
+                    Mark completed
+                  </button>
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => onDeleteAccountRequestStatusChange(request.id, "cancelled")}
+                  >
+                    Cancel request
+                  </button>
+                </div>
+              </article>
+            );
+          })
+        ) : (
+          <p className="muted-copy">No account deletion requests.</p>
         )}
       </section>
 
