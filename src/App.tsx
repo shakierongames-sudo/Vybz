@@ -29,6 +29,8 @@ import type {
   AgeGateInput,
   Block,
   CreatePostInput,
+  DeleteAccountRequest,
+  DeleteRequestStatus,
   Follow,
   PostStatus,
   PostWithMeta,
@@ -255,6 +257,7 @@ export default function App() {
   const [follows, setFollows] = useState<Follow[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [deleteAccountRequests, setDeleteAccountRequests] = useState<DeleteAccountRequest[]>([]);
   const [activityNotifications, setActivityNotifications] = useState<ActivityNotification[]>([]);
   const [notice, setNotice] = useState<AppNotice | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -282,6 +285,7 @@ export default function App() {
       setFollows(data.follows);
       setBlocks(data.blocks);
       setReports(data.reports);
+      setDeleteAccountRequests(data.deleteAccountRequests);
       setActivityNotifications(data.activityNotifications);
       setProfileLoadedForUserId(userId);
     } catch (error) {
@@ -333,6 +337,7 @@ export default function App() {
         setFollows([]);
         setBlocks([]);
         setReports([]);
+        setDeleteAccountRequests([]);
         setActivityNotifications([]);
         setProfileLoadedForUserId(null);
       }
@@ -929,6 +934,18 @@ export default function App() {
     }, "Report updated.");
   };
 
+  const handleDeleteAccountRequestStatusChange = async (requestId: string, status: DeleteRequestStatus) => {
+    if (!currentUser.isAdmin) return;
+    const request = deleteAccountRequests.find((item) => item.id === requestId);
+
+    await withAction(async () => {
+      const { error } = await requireSupabase().from("delete_account_requests").update({ status }).eq("id", requestId);
+      if (error) throw error;
+      await recordModerationAction(`delete_account_request_${status}`, undefined, request?.userId);
+      await refreshData();
+    }, status === "completed" ? "Deletion request marked completed." : "Deletion request cancelled.");
+  };
+
   const handleActivityOpened = () => {
     if (unreadActivityCount > 0) {
       playActivitySound();
@@ -973,15 +990,28 @@ export default function App() {
     if (!session?.user.id) return;
 
     await withAction(async () => {
-      const { error } = await requireSupabase().from("delete_account_requests").upsert(
-        {
-          user_id: session.user.id,
-          status: "open",
-        },
-        { onConflict: "user_id" },
-      );
+      const client = requireSupabase();
+      const { data: existingRequest, error: existingError } = await client
+        .from("delete_account_requests")
+        .select("id,status")
+        .eq("user_id", session.user.id)
+        .maybeSingle();
 
-      if (error) throw error;
+      if (existingError) throw existingError;
+
+      if (existingRequest?.status === "open") {
+        throw new Error("You already have an open deletion request.");
+      }
+
+      const result = existingRequest
+        ? await client.from("delete_account_requests").update({ status: "open" }).eq("id", existingRequest.id)
+        : await client.from("delete_account_requests").insert({
+            user_id: session.user.id,
+            status: "open",
+          });
+
+      if (result.error) throw result.error;
+      await refreshData(session.user.id);
     }, "Deletion request sent.");
   };
 
@@ -1162,6 +1192,9 @@ export default function App() {
               <Settings
                 currentUser={currentUser}
                 blockedProfiles={blockedProfiles}
+                hasOpenDeletionRequest={deleteAccountRequests.some(
+                  (request) => request.userId === currentUser.id && request.status === "open",
+                )}
                 isSupabaseConfigured={isSupabaseConfigured}
                 loading={actionLoading}
                 onSaveProfile={handleSaveProfile}
@@ -1180,9 +1213,11 @@ export default function App() {
                   posts={accessiblePosts}
                   profiles={profiles}
                   reports={reports}
+                  deleteAccountRequests={deleteAccountRequests}
                   onPostStatusChange={handlePostStatusChange}
                   onUserStatusChange={handleUserStatusChange}
                   onReportStatusChange={handleReportStatusChange}
+                  onDeleteAccountRequestStatusChange={handleDeleteAccountRequestStatusChange}
                 />
               ) : (
                 <Navigate to="/feed" replace />
