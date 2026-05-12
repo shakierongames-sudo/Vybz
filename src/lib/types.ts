@@ -2,6 +2,7 @@ export type UserStatus = "active" | "suspended" | "banned";
 export type PostStatus = "active" | "under_review" | "removed";
 export type PostVisibility = "public" | "followers";
 export type ReportStatus = "open" | "reviewing" | "dismissed" | "resolved";
+export type DeleteRequestStatus = "open" | "completed" | "cancelled";
 export type ActivityType =
   | "post_rated"
   | "user_followed"
@@ -61,6 +62,14 @@ export type Report = {
   details: string;
   status: ReportStatus;
   createdAt: string;
+};
+
+export type DeleteAccountRequest = {
+  id: string;
+  userId: string;
+  status: DeleteRequestStatus;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type Follow = {
