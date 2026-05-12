@@ -19,7 +19,7 @@ type LoginProps = {
   loading: boolean;
   onLogin: (email: string, password: string) => Promise<AuthResult>;
   onSignUp: (email: string, password: string, ageGate: AgeGateInput) => Promise<AuthResult>;
-  onGoogleSignIn: () => Promise<AuthResult>;
+  onGoogleSignIn?: () => Promise<AuthResult>;
 };
 
 function getAge(dateValue: string) {
@@ -157,7 +157,17 @@ export function Login({ session, hasProfile, loading, onLogin, onSignUp, onGoogl
 
   const handleGoogleSignIn = async () => {
     setMessage("");
-    const result = await onGoogleSignIn();
+    const result = onGoogleSignIn
+      ? await onGoogleSignIn()
+      : await requireSupabase()
+          .auth.signInWithOAuth({
+            provider: "google",
+            options: {
+              redirectTo: `${window.location.origin}/login`,
+            },
+          })
+          .then(({ error }) => (error ? { ok: false, message: friendlyError(error) } : { ok: true }))
+          .catch((error) => ({ ok: false, message: friendlyError(error) }));
 
     if (!result.ok) {
       setMessage(result.message ?? "Google sign-in could not start.");
