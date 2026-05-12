@@ -3,14 +3,14 @@ import { Link } from "react-router-dom";
 import { LogOut, RefreshCw, ShieldCheck, Trash2 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { getImageSizeHint, normalizeUsername, validateImage, validateUsername } from "../lib/supabaseData";
-import type { ProfileInput, VybzProfile } from "../lib/types";
+import type { ProfileInput, SaveProfileResult, VybzProfile } from "../lib/types";
 
 type SettingsProps = {
   currentUser: VybzProfile;
   blockedProfiles: VybzProfile[];
   isSupabaseConfigured: boolean;
   loading: boolean;
-  onSaveProfile: (input: ProfileInput, avatarFile?: File | null) => Promise<boolean>;
+  onSaveProfile: (input: ProfileInput, avatarFile?: File | null) => Promise<SaveProfileResult>;
   onUnblock: (profileId: string) => Promise<void>;
   onLogout: () => Promise<void>;
   onDeleteAccountRequest: () => Promise<void>;
@@ -86,12 +86,17 @@ export function Settings({
       return;
     }
 
+    if (!displayName.trim()) {
+      setMessage("Add a display name.");
+      return;
+    }
+
     if (usernameChanged && usernameCooldownDays > 0) {
       setMessage(`Username can only be changed once every 30 days. Try again in ${usernameCooldownDays} days.`);
       return;
     }
 
-    const saved = await onSaveProfile(
+    const result = await onSaveProfile(
       {
         username,
         displayName,
@@ -104,10 +109,13 @@ export function Settings({
       avatarFile,
     );
 
-    if (saved) {
+    if (result.ok) {
       setMessage("Profile updated.");
       setAvatarFile(null);
+      return;
     }
+
+    setMessage(result.message ?? "Profile save failed.");
   };
 
   return (
