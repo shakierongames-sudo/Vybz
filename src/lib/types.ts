@@ -105,6 +105,11 @@ export type ProfileInput = {
   ageGate?: AgeGateInput;
 };
 
+export type SaveProfileResult = {
+  ok: boolean;
+  message?: string;
+};
+
 export type AgeGateInput = {
   ageGatePassed: boolean;
   ageGateCheckedAt: string;
