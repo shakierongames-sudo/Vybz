@@ -8,6 +8,7 @@ import type { ProfileInput, SaveProfileResult, VybzProfile } from "../lib/types"
 type SettingsProps = {
   currentUser: VybzProfile;
   blockedProfiles: VybzProfile[];
+  hasOpenDeletionRequest: boolean;
   isSupabaseConfigured: boolean;
   loading: boolean;
   onSaveProfile: (input: ProfileInput, avatarFile?: File | null) => Promise<SaveProfileResult>;
@@ -28,6 +29,7 @@ function daysUntilUsernameChange(usernameUpdatedAt: string | null) {
 export function Settings({
   currentUser,
   blockedProfiles,
+  hasOpenDeletionRequest,
   isSupabaseConfigured,
   loading,
   onSaveProfile,
@@ -244,10 +246,13 @@ export function Settings({
 
       <section className="moderation-section">
         <h2>Account</h2>
+        {hasOpenDeletionRequest ? <p className="muted-copy">Account deletion request sent.</p> : null}
         <button type="button" className="settings-row" onClick={onDeleteAccountRequest}>
           <span>
             <strong>Request account deletion</strong>
-            <small>Creates an admin review request</small>
+            <small>
+              {hasOpenDeletionRequest ? "You already have an open deletion request." : "Creates an admin review request"}
+            </small>
           </span>
           <Trash2 size={20} aria-hidden="true" />
         </button>
