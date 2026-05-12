@@ -102,6 +102,7 @@ export type ProfileInput = {
   publicScoreEnabled: boolean;
   soundEffectsEnabled?: boolean;
   hapticsEnabled?: boolean;
+  ageGate?: AgeGateInput;
 };
 
 export type AgeGateInput = {
