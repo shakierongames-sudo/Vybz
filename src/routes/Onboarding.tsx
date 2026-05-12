@@ -3,14 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { CheckCircle2 } from "lucide-react";
 import { Avatar } from "../components/Avatar";
 import { requireSupabase } from "../lib/supabaseClient";
-import { friendlyError, getImageSizeHint, normalizeUsername, validateImage, validateUsername } from "../lib/supabaseData";
-import type { ProfileInput, VybzProfile } from "../lib/types";
+import { getImageSizeHint, normalizeUsername, validateImage, validateUsername } from "../lib/supabaseData";
+import type { ProfileInput, SaveProfileResult, VybzProfile } from "../lib/types";
 
 type OnboardingProps = {
   currentUser: VybzProfile;
   loading: boolean;
   requiresAgeConfirmation?: boolean;
-  onSave: (input: ProfileInput, avatarFile?: File | null) => Promise<boolean>;
+  onSave: (input: ProfileInput, avatarFile?: File | null) => Promise<SaveProfileResult>;
 };
 
 const colorOptions = ["#39FF88", "#25D9FF", "#FFE84A", "#F43F5E"];
@@ -109,6 +109,11 @@ export function Onboarding({ currentUser, loading, requiresAgeConfirmation, onSa
       return;
     }
 
+    if (!displayName.trim()) {
+      setMessage("Add a display name.");
+      return;
+    }
+
     if (effectiveRequiresAgeConfirmation && !isAgeAllowed) {
       setMessage("Sorry, you must be at least 13 years old to use Vybz.");
       return;
@@ -128,37 +133,29 @@ export function Onboarding({ currentUser, loading, requiresAgeConfirmation, onSa
         }
       : undefined;
 
-    if (ageGate) {
-      const { error } = await requireSupabase().auth.updateUser({
-        data: {
-          age_gate_passed: ageGate.ageGatePassed,
-          age_gate_checked_at: ageGate.ageGateCheckedAt,
-          terms_accepted_at: ageGate.termsAcceptedAt,
+    try {
+      const result = await onSave(
+        {
+          username,
+          displayName,
+          bio,
+          vibeColor,
+          publicScoreEnabled: currentUser.publicScoreEnabled,
+          soundEffectsEnabled: currentUser.soundEffectsEnabled,
+          hapticsEnabled: currentUser.hapticsEnabled,
+          ageGate,
         },
-      });
+        avatarFile,
+      );
 
-      if (error) {
-        setMessage(friendlyError(error));
+      if (result.ok) {
+        navigate("/feed");
         return;
       }
-    }
 
-    const saved = await onSave(
-      {
-        username,
-        displayName,
-        bio,
-        vibeColor,
-        publicScoreEnabled: currentUser.publicScoreEnabled,
-        soundEffectsEnabled: currentUser.soundEffectsEnabled,
-        hapticsEnabled: currentUser.hapticsEnabled,
-        ageGate,
-      },
-      avatarFile,
-    );
-
-    if (saved) {
-      navigate("/feed");
+      setMessage(result.message ?? "Profile save failed.");
+    } catch {
+      setMessage("Profile save failed.");
     }
   };
 
