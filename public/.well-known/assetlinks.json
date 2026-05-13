@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.vybz.app",
+      "sha256_cert_fingerprints": [
+        "0A:4A:DA:70:12:3C:C5:22:CC:92:54:EC:FA:83:EA:25:DB:80:BB:F5:33:10:A0:F9:C6:5B:89:C7:BD:94:C0:54"
+      ]
+    }
+  }
+]
