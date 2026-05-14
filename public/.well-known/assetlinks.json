@@ -5,9 +5,9 @@
     ],
     "target": {
       "namespace": "android_app",
-      "package_name": "com.vybz.app",
+      "package_name": "com.vybzsocial.app",
       "sha256_cert_fingerprints": [
-        "0A:4A:DA:70:12:3C:C5:22:CC:92:54:EC:FA:83:EA:25:DB:80:BB:F5:33:10:A0:F9:C6:5B:89:C7:BD:94:C0:54"
+        "B1:BA:F1:A0:7A:57:46:2E:80:A2:D9:DF:29:3E:45:65:0F:D8:06:E1:24:94:8C:23:9B:DC:25:5F:B1:CC:D9:0E"
       ]
     }
   }
