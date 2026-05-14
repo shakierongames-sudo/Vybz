@@ -7,7 +7,8 @@
       "namespace": "android_app",
       "package_name": "com.vybzsocial.app",
       "sha256_cert_fingerprints": [
-        "B1:BA:F1:A0:7A:57:46:2E:80:A2:D9:DF:29:3E:45:65:0F:D8:06:E1:24:94:8C:23:9B:DC:25:5F:B1:CC:D9:0E"
+        "B1:BA:F1:A0:7A:57:46:2E:80:A2:D9:DF:29:3E:45:65:0F:D8:06:E1:24:94:8C:23:9B:DC:25:5F:B1:CC:D9:0E",
+        "4C:FD:1A:81:EF:C0:44:4A:36:B8:1E:EE:90:3F:BF:26:D0:B2:E7:89:48:F9:4A:64:BC:21:88:16:87:DD:7B:80"
       ]
     }
   }
